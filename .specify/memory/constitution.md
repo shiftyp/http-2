@@ -1,50 +1,63 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# HTTP-over-Radio Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Amateur Radio First
+All functionality must comply with FCC Part 97 regulations. Automatic identification required every 10 minutes. No business communications. Third-party traffic restrictions apply for non-control operator stations. 2024 rule changes: No symbol rate limits, 2.8 kHz bandwidth limit maintained.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Progressive Web App Architecture  
+Browser-first design with no backend dependencies. Service Worker for offline functionality. Web Serial API for radio control. IndexedDB for local storage. All libraries must work in browser environment without Node.js dependencies.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-First Development (NON-NEGOTIABLE)
+TDD mandatory: Tests written → User approved → Tests fail → Then implement. Red-Green-Refactor cycle strictly enforced. Unit tests, integration tests, and E2E tests required. GitHub Actions CI/CD pipeline validates all changes.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Compression-First Protocol Design
+All transmissions must be optimized for limited bandwidth. Target 10-20x compression ratios. JSX-to-template compilation reduces React components to 2-4 byte template IDs. Delta updates for DOM changes only. Dictionary compression for ham radio terminology.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Adaptive RF Performance
+Automatic mode selection based on SNR: HTTP-11200 (16-QAM, 8.4 kbps) for SNR >20dB down to HTTP-1000 (QPSK, 750 bps) for SNR <0dB. AFC with pilot tone tracking. Convolutional encoding with Viterbi decoding.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Technology Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Frequency Allocations
+- Primary: 14.078.0 - 14.083.0 kHz (20m)
+- Secondary: 7.043.0 - 7.048.0 kHz (40m), 21.078.0 - 21.083.0 kHz (15m)
+- All modes: 2.8 kHz bandwidth maximum, no symbol rate limit (2024 FCC rules)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Radio Compatibility
+Support Icom (CI-V), Yaesu (CAT), Kenwood (PC), and Flex (SmartSDR) protocols via Web Serial API. PTT control required. Frequency, mode, and power monitoring. SWR protection.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Performance Standards
+- Target transmission time: <1 second for updates, <10 seconds for full pages
+- Compression ratio: >80% for typical content
+- Offline-first: All content cached locally
+- PWA install support required
+
+## Development Workflow
+
+### Implementation Priority
+1. Core libraries (crypto, compression, protocol, radio control)
+2. Integration testing with mock radios
+3. UI components and user workflows  
+4. Real radio testing and field validation
+5. Mesh networking and advanced features
+
+### Quality Gates
+- All TypeScript compilation must pass
+- ESLint/Prettier formatting enforced
+- 90%+ test coverage required
+- Security audit passing (npm audit)
+- Performance benchmarks met
+
+### Code Organization
+- `/src/lib/` - Core libraries (independently testable)
+- `/src/components/` - React UI components
+- `/src/pages/` - Page-level components
+- `/tests/` - Test suites (unit, integration, E2E)
+- `/docs/` - Technical documentation
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Constitution supersedes all other practices. Amendments require documentation, approval, and migration plan. All PRs must verify FCC compliance and performance standards. Complexity must be justified with compression/performance benefits.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2025-01-12 | **Last Amended**: 2025-01-12

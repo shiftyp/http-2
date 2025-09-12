@@ -31,17 +31,22 @@ beforeAll(() => {
   });
 
   // Mock Web Crypto API
+  const mockKeyPair = {
+    publicKey: { type: 'public', algorithm: { name: 'ECDSA' } },
+    privateKey: { type: 'private', algorithm: { name: 'ECDSA' } }
+  };
+
   Object.defineProperty(global, 'crypto', {
     value: {
       subtle: {
-        generateKey: vi.fn(),
-        importKey: vi.fn(),
-        exportKey: vi.fn(),
-        sign: vi.fn(),
-        verify: vi.fn(),
-        encrypt: vi.fn(),
-        decrypt: vi.fn(),
-        deriveBits: vi.fn()
+        generateKey: vi.fn(() => Promise.resolve(mockKeyPair)),
+        importKey: vi.fn(() => Promise.resolve(mockKeyPair.publicKey)),
+        exportKey: vi.fn(() => Promise.resolve(new ArrayBuffer(64))),
+        sign: vi.fn(() => Promise.resolve(new ArrayBuffer(64))),
+        verify: vi.fn(() => Promise.resolve(true)),
+        encrypt: vi.fn(() => Promise.resolve(new ArrayBuffer(32))),
+        decrypt: vi.fn(() => Promise.resolve(new ArrayBuffer(32))),
+        deriveBits: vi.fn(() => Promise.resolve(new ArrayBuffer(32)))
       },
       getRandomValues: vi.fn((arr) => {
         for (let i = 0; i < arr.length; i++) {
