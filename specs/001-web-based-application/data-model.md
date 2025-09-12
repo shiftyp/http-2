@@ -177,25 +177,52 @@ Represents a node in the mesh network.
 - Link quality based on SNR and success rate
 - Routing loops must be prevented
 
-### Certificate
-Represents a digital certificate for station authentication.
+### SigningListEntry
+Represents an entry in the distributed signing list (similar to DMR ID database).
 
 **Fields**:
-- `id`: uuid (primary key) - Certificate identifier
-- `callsign`: string - Station callsign
+- `callsign`: string (primary key) - Amateur radio callsign
+- `operatorName`: string - Full legal name of operator
+- `country`: string - Country code (ISO 3166)
+- `state`: string - State/province code
+- `city`: string - City name
 - `publicKey`: text - RSA public key (PEM format)
-- `signature`: text - Certificate signature
-- `issuer`: string - Issuing authority (root CA or self)
-- `issuedAt`: datetime - Issue timestamp
-- `expiresAt`: datetime - Expiration timestamp
+- `signature`: text - Entry signature (signed by previous valid entry)
+- `addedDate`: datetime - When added to list
+- `lastVerified`: datetime - Last verification timestamp
+- `trustLevel`: number - Trust score (0-100)
+- `endorsements`: array - List of callsigns that endorse this entry
 - `revoked`: boolean - Revocation status
-- `revokedAt`: datetime - Revocation timestamp (nullable)
+- `revokedDate`: datetime - Revocation timestamp (nullable)
 - `revokedReason`: string - Revocation reason (nullable)
 
 **Validation**:
-- Signature must be valid
-- Expiration must be future date on issue
-- Callsign must match certificate CN
+- Callsign must be valid amateur format
+- Signature chain must be valid
+- Trust level calculated from endorsements
+
+### SigningListMetadata
+Manages the pre-distributed signing list metadata and verification.
+
+**Fields**:
+- `id`: uuid (primary key) - List identifier
+- `version`: string - Signing list version (semantic versioning)
+- `publishDate`: datetime - When list was published
+- `checksum`: string - SHA-256 of complete list
+- `entryCount`: number - Number of entries
+- `signature`: string - Publisher's cryptographic signature
+- `publisher`: string - Trusted publisher identity
+- `sourceUrl`: string - Where list was obtained (for reference only)
+- `importDate`: datetime - When imported to this system
+- `verificationStatus`: enum - 'verified', 'unverified', 'invalid'
+- `nextUpdateExpected`: datetime - When to check for updates (out-of-band)
+- `backupPath`: string - Local backup file location
+
+**Validation**:
+- Signature must be from trusted publisher
+- Checksum must match list contents
+- Version must not regress
+- List must be imported via secure channel only
 
 ### TransmissionLog
 Audit log of all transmissions for FCC compliance.
@@ -235,8 +262,8 @@ Resource (N) ←→ (N) MeshNode (cached)
 MeshNode (N) ←→ (N) MeshNode (via routingTable)
 MeshNode (1) ←→ (1) BandwidthPolicy
 
-Certificate (1) ←→ (1) RadioStation
-Certificate (1) ←→ (1) MeshNode
+SigningListEntry (1) ←→ (1) RadioStation
+SigningListEntry (N) ←→ (N) SigningListEntry (via endorsements)
 
 TransmissionLog (N) ←→ (1) RadioStation
 ```

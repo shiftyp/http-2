@@ -78,27 +78,31 @@ As a ham radio operator, I want to connect my radio equipment to a web applicati
 ### Functional Requirements
 - **FR-001**: System MUST support connection to multiple radio models via CAT (Computer Aided Transceiver) control interface
 - **FR-002**: System MUST support audio input/output through radio sound interfaces for data transmission
-- **FR-003**: System MUST allow users to create, edit, and manage markdown documents
-- **FR-004**: System MUST digitize markdown documents into a format suitable for radio transmission
-- **FR-005**: System MUST transmit digitized documents over connected radio equipment
-- **FR-006**: System MUST receive and decode digitized transmissions from other stations
-- **FR-007**: System MUST implement mesh networking behavior for document forwarding between nodes
-- **FR-008**: System MUST handle document requests from other nodes in the network
-- **FR-009**: System MUST forward documents through intermediate nodes when direct connection is unavailable
-- **FR-010**: System MUST maintain file-based storage for documents with unique identifiers composed of callsign plus file path
-- **FR-011**: System MUST store document metadata in frontmatter including transmission details like hops, signal strength, and timestamps
-- **FR-012**: System MUST authenticate stations using a combination of callsigns and digital certificates managed by the application's built-in certificate authority
+- **FR-003**: System MUST allow users to create, edit, and manage HTML pages with forms
+- **FR-004**: System MUST digitize HTML content into a format suitable for radio transmission
+- **FR-005**: System MUST transmit digitized content over connected radio equipment using HTTP protocol
+- **FR-006**: System MUST receive and decode HTTP transmissions from other stations
+- **FR-007**: System MUST implement mesh networking behavior for HTTP request/response forwarding between nodes
+- **FR-008**: System MUST handle HTTP requests from other nodes in the network
+- **FR-009**: System MUST forward HTTP traffic through intermediate nodes when direct connection is unavailable
+- **FR-010**: System MUST maintain file-based storage for HTML resources with URLs in format http://callsign.radio/path
+- **FR-011**: System MUST operate entirely offline without requiring internet connectivity
+- **FR-012**: System MUST authenticate stations using a distributed signing list similar to DMR ID databases
 - **FR-013**: System MUST use QPSK modulation for transmissions, compliant with FCC bandwidth regulations for HF bands
 - **FR-014**: System MUST support single operator model where each operator has full control of their own station
 - **FR-015**: System MUST implement adaptive retry protocols that adjust based on propagation conditions and transmission success rates
-- **FR-016**: Documents MUST support user-defined retention policies configurable per document type
+- **FR-016**: System MUST maintain a local copy of the pre-distributed signing list for offline authentication
+- **FR-017**: System MUST verify signing list integrity using cryptographic signatures before use
+- **FR-018**: System MUST update signing list ONLY through secure out-of-band channels (NOT via radio)
+- **FR-019**: The server component MUST only serve the frontend application and read-only signing list
 
 ### Key Entities *(include if feature involves data)*
 - **Radio Station**: Represents a ham radio operator's setup including their radio equipment, callsign, and connection status
-- **Markdown Document**: Text document created and managed by users, containing content to be transmitted
+- **HTML Resource**: HTML pages with forms served over radio via HTTP protocol
 - **Transmission**: Represents a digitized document being sent or received over radio, including metadata like sender, recipient, and status
 - **Network Node**: Represents a station in the mesh network, maintaining routing information and connectivity status
-- **Document Request**: Represents a request from one node to another for a specific document
+- **HTTP Request**: Represents an HTTP request transmitted over radio
+- **Signing List**: Distributed database of verified station callsigns and public keys
 - **Route**: Represents the path through which documents are forwarded in the mesh network
 
 ---

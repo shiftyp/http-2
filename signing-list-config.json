@@ -1,0 +1,31 @@
+{
+  "trustedPublishers": [
+    {
+      "name": "Ham Radio HTTP Project",
+      "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----",
+      "url": "https://signing.hamradiohttp.org",
+      "description": "Official signing list publisher"
+    }
+  ],
+  "updatePolicy": {
+    "checkInterval": 604800000,
+    "requireSignature": true,
+    "allowManualImport": true,
+    "backupCount": 5,
+    "importMethods": ["file", "https", "usb"]
+  },
+  "verification": {
+    "requireTwoFactorImport": false,
+    "minimumTrustLevel": 50,
+    "requiredEndorsements": 2,
+    "allowSelfSigned": false
+  },
+  "security": {
+    "note": "NEVER synchronize signing list over radio",
+    "updateChannels": [
+      "Secure HTTPS with certificate pinning",
+      "Physical media exchange at hamfests",
+      "Direct file transfer over secure channel"
+    ]
+  }
+}

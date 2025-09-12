@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Local development only - production runs entirely offline
+  dev-db:
+    image: keinos/sqlite3:latest
+    volumes:
+      - ./data:/data
+    command: /bin/sh -c "while true; do sleep 30; done"
+    profiles:
+      - development
+
+  # Signing list sync service (runs periodically when internet available)
+  signing-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.sync
+    volumes:
+      - ./data/signing-list.json:/app/signing-list.json
+      - ./data/signing-list-backups:/app/backups
+    environment:
+      - SYNC_INTERVAL=86400
+      - BACKUP_COUNT=7
+    profiles:
+      - sync
+    restart: unless-stopped
+
+volumes:
+  radio-data:
+    driver: local

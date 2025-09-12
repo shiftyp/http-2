@@ -29,12 +29,12 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-A web-based application for ham radio operators that enables digital communication through radio interfaces. The system connects to HF and other radios via CAT control and sound interfaces, digitizes markdown documents for transmission using QPSK modulation, and implements mesh networking for automatic document forwarding between stations. Authentication uses callsigns with digital certificates managed by the application's built-in CA.
+An offline-first web application for ham radio operators that enables HTTP communication over radio. The system connects to radios via CAT control and sound interfaces, serves HTML pages with forms over radio using HTTP protocol and QPSK modulation, and implements mesh networking for request/response forwarding. Authentication uses a distributed signing list (similar to DMR ID databases) that each node maintains locally, with no central authority required.
 
 ## Technical Context
 **Language/Version**: Node.js 20 LTS / TypeScript 5.x  
 **Primary Dependencies**: Express.js (backend API), React (frontend UI), serialport (CAT control), Web Audio API (sound processing)  
-**Storage**: File-based document storage with SQLite for metadata and routing tables  
+**Storage**: File-based HTML resource storage with SQLite for routing tables and signing list  
 **Testing**: Jest (unit/integration), Playwright (E2E)  
 **Target Platform**: Linux/Windows/macOS (cross-platform web app)
 **Project Type**: web - frontend+backend with radio hardware integration  
@@ -56,9 +56,9 @@ A web-based application for ham radio operators that enables digital communicati
 - Libraries listed:
   - radio-control: CAT control and radio interface management
   - qpsk-modem: QPSK modulation/demodulation for data transmission
-  - mesh-router: Document routing and mesh network management
-  - doc-manager: Markdown document storage and metadata handling
-  - cert-authority: Digital certificate generation and validation
+  - mesh-router: HTTP request/response routing and mesh network management
+  - resource-manager: HTML resource storage and caching
+  - signing-list: Distributed signing list management and synchronization
 - CLI per library: Each library will expose CLI commands for testing
 - Library docs: llms.txt format planned? Yes
 
