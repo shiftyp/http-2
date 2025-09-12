@@ -30,6 +30,84 @@ Represents a ham radio operator's station configuration and status.
 - Grid square must be valid Maidenhead format
 - Audio devices must exist on system
 
+### StaticPage
+Represents static content served at /pages/* paths.
+
+**Fields**:
+- `path`: string (primary key) - URL path (e.g., "/pages/about.html")
+- `format`: enum - Content format
+  - Values: 'markdown', 'html'
+- `content`: text - Raw content (Markdown or HTML)
+- `metadata`: object - Frontmatter for Markdown
+  - `title`: string - Page title
+  - `author`: string - Author callsign
+  - `created`: datetime - Creation date
+  - `updated`: datetime - Last update
+  - Additional custom fields
+- `size`: number - Content size in bytes
+- `checksum`: string - SHA-256 hash of content
+- `created`: datetime - Database creation time
+- `updated`: datetime - Database update time
+
+**Validation**:
+- Path must start with /pages/
+- Size must not exceed 1MB
+- Checksum must match content
+
+### ServerFunction
+JavaScript functions served at /functions/* paths.
+
+**Fields**:
+- `path`: string (primary key) - URL path (e.g., "/functions/contact")
+- `name`: string - Function name
+- `description`: string - Function description
+- `code`: text - JavaScript source code
+- `version`: string - Semantic version
+- `handler`: enum - Export type
+  - Values: 'default', 'named'
+- `methods`: array - Supported HTTP methods
+  - Values: ['GET', 'POST', 'PUT', 'DELETE']
+- `contextUsage`: object - Which context APIs are used
+  - `store`: boolean - Uses data storage
+  - `respond`: boolean - Uses response helpers
+  - `crypto`: boolean - Uses crypto utilities
+- `created`: datetime - Creation time
+- `updated`: datetime - Last update
+- `lastExecuted`: datetime - Last execution time
+- `executionCount`: number - Total executions
+
+**Validation**:
+- Path must start with /functions/
+- Code must be valid JavaScript
+- Size must not exceed 100KB
+
+### FunctionDatabase
+Database schema for server functions.
+
+**Fields**:
+- `functionId`: string (primary key) - Function that owns this database
+- `tables`: array - Tables in this database
+  - `name`: string - Table name
+  - `fields`: object - Field definitions
+    - Field name → type and constraints
+  - `indexes`: array - Additional indexes
+  - `recordCount`: number - Current records
+- `version`: number - Schema version for migrations
+- `created`: datetime - Creation time
+- `updated`: datetime - Last update
+
+### FunctionData
+Data stored by server functions (via ORM).
+
+**Fields**:
+- `id`: string/number (primary key) - Primary key (auto or manual)
+- `functionId`: string - Function that owns this data
+- `tableName`: string - Table this record belongs to
+- `data`: object - Actual data fields
+- `created`: datetime - Creation time
+- `updated`: datetime - Last update
+- `version`: number - For optimistic locking
+
 ### Resource
 Represents an HTTP resource (HTML page, form, file) served over radio.
 
@@ -244,14 +322,59 @@ Audit log of all transmissions for FCC compliance.
 - Must be retained for minimum period
 - Cannot be modified after creation
 
+### DataTableView
+Configuration for spreadsheet-like table views.
+
+**Fields**:
+- `id`: uuid (primary key) - View identifier
+- `functionId`: string - Function that owns the table
+- `tableName`: string - Table being viewed
+- `columns`: array - Column configuration
+  - `field`: string - Field name
+  - `label`: string - Display label
+  - `width`: number - Column width in pixels
+  - `visible`: boolean - Show/hide column
+  - `pinned`: enum - Pin position ('left', 'right', null)
+  - `format`: string - Display format
+- `filters`: array - Active filters
+  - `field`: string - Field to filter
+  - `operator`: enum - Filter operator
+    - Values: 'equals', 'contains', 'gt', 'lt', 'between'
+  - `value`: any - Filter value
+- `sort`: array - Sort configuration
+  - `field`: string - Sort field
+  - `direction`: enum - Sort direction ('asc', 'desc')
+- `pageSize`: number - Records per page
+- `currentPage`: number - Current page number
+- `name`: string - View name
+- `isDefault`: boolean - Default view for this table
+- `created`: datetime - Creation time
+- `updated`: datetime - Last update
+
+**Validation**:
+- Field names must exist in table schema
+- Page size must be between 10-100
+- Sort fields must be indexed
+
 ## Relationships
 
 ```
-RadioStation (1) ←→ (N) Resource (hosts)
+RadioStation (1) ←→ (N) StaticPage (creates)
+RadioStation (1) ←→ (N) ServerFunction (creates)
 RadioStation (1) ←→ (N) HttpRequest (originates)
 RadioStation (1) ←→ (N) Transmission
 RadioStation (1) ←→ (1) Certificate
 RadioStation (1) ←→ (1) MeshNode
+
+ServerFunction (1) ←→ (1) FunctionDatabase
+ServerFunction (1) ←→ (N) FunctionData
+ServerFunction (1) ←→ (N) DataTableView
+
+FunctionDatabase (1) ←→ (N) FunctionData
+FunctionDatabase (1) ←→ (N) DataTableView
+
+StaticPage (N) ←→ (N) MeshNode (cached)
+ServerFunction (N) ←→ (N) MeshNode (available)
 
 HttpRequest (1) ←→ (1) HttpResponse
 HttpRequest (1) ←→ (N) Transmission (forwarded)
@@ -301,11 +424,14 @@ requested → fetching → cached → validated → stale → purged
 ## Indexes
 
 For optimal query performance:
-- `documents_by_callsign`: (callsign, filePath)
+- `pages_by_path`: (path)
+- `functions_by_path`: (path)
+- `function_data_by_table`: (functionId, tableName, id)
 - `transmissions_by_status`: (status, startTime)
 - `nodes_by_quality`: (linkQuality DESC, lastHeard DESC)
 - `routes_by_destination`: (destination, metric)
 - `logs_by_date`: (timestamp, callsign)
+- `data_views_by_function`: (functionId, tableName)
 
 ## Data Constraints
 

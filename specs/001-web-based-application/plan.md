@@ -29,36 +29,43 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-An offline-first web application for ham radio operators that enables HTTP communication over radio. The system connects to radios via CAT control and sound interfaces, serves HTML pages with forms over radio using HTTP protocol and QPSK modulation, and implements mesh networking for request/response forwarding. Authentication uses a distributed signing list (similar to DMR ID databases) that each node maintains locally, with no central authority required.
+A Progressive Web App (PWA) for ham radio operators that enables HTTP communication over radio. Each station can create and host "server applications" locally that process HTTP requests and form submissions. The application runs entirely in the browser using Web Serial API for radio control and Web Audio API for signal processing. Server apps are JavaScript programs stored in IndexedDB and executed in sandboxed environments when HTTP requests arrive via radio. After initial installation, everything operates fully offline with service workers.
 
 ## Technical Context
-**Language/Version**: Node.js 20 LTS / TypeScript 5.x  
-**Primary Dependencies**: Express.js (backend API), React (frontend UI), serialport (CAT control), Web Audio API (sound processing)  
-**Storage**: File-based HTML resource storage with SQLite for routing tables and signing list  
-**Testing**: Jest (unit/integration), Playwright (E2E)  
-**Target Platform**: Linux/Windows/macOS (cross-platform web app)
-**Project Type**: web - frontend+backend with radio hardware integration  
+**Language/Version**: TypeScript 5.x / Modern JavaScript (ES2022+)  
+**Primary Dependencies**: React (UI), Workbox (service worker), Web Serial API, Web Audio API, IndexedDB  
+**Storage**: IndexedDB for all local storage (no server-side storage)  
+**Testing**: Vitest (unit), Playwright (E2E)  
+**Target Platform**: Modern browsers with Web Serial API support (Chrome, Edge, Opera)
+**Project Type**: Progressive Web App (PWA) with offline-first architecture  
 **Performance Goals**: <500ms transmission initiation, support 10+ concurrent mesh nodes  
-**Constraints**: FCC bandwidth compliance for HF, <2.8kHz bandwidth, adaptive to poor SNR conditions  
+**Constraints**: FCC 2024 rules - 2.8kHz bandwidth limit (symbol rate limits removed), adaptive SNR  
 **Scale/Scope**: Single operator per station, unlimited documents, mesh network up to 100 nodes
+**Modulation**: QPSK/16-QAM adaptive (1-11.2 kbps effective), Web Audio API based
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 **Simplicity**:
-- Projects: 2 (backend API, frontend UI)
-- Using framework directly? Yes (Express, React without wrappers)
-- Single data model? Yes (shared TypeScript interfaces)
-- Avoiding patterns? Yes (direct service calls, no unnecessary abstractions)
+- Projects: 1 (Single PWA, no backend)
+- Using framework directly? Yes (React without wrappers)
+- Single data model? Yes (TypeScript interfaces)
+- Avoiding patterns? Yes (direct function calls, no unnecessary abstractions)
 
 **Architecture**:
 - EVERY feature as library? Yes
 - Libraries listed:
-  - radio-control: CAT control and radio interface management
-  - qpsk-modem: QPSK modulation/demodulation for data transmission
-  - mesh-router: HTTP request/response routing and mesh network management
-  - resource-manager: HTML resource storage and caching
-  - signing-list: Distributed signing list management and synchronization
+  - radio-control: Web Serial API wrapper for CAT control (Icom, Yaesu, Kenwood, Flex)
+  - qpsk-modem: Web Audio API QPSK/16-QAM modulation (HoR-1000 to HoR-11200)
+  - hor-protocol: HTTP-over-Radio protocol with delta updates & compression
+  - jsx-radio: React-like JSX compilation to compressed templates
+  - compression: HTML/CSS/JS compression with dictionary & template system
+  - themes: Customizable theming system with 8 built-in themes
+  - mesh-router: HTTP request/response routing over radio
+  - function-runtime: FaaS execution engine for server functions
+  - orm: Simplified ORM wrapper for IndexedDB operations
+  - data-table: Spreadsheet-like interface for database tables
+  - signing-list: Pre-distributed signing list verification
 - CLI per library: Each library will expose CLI commands for testing
 - Library docs: llms.txt format planned? Yes
 
@@ -95,39 +102,64 @@ specs/001-web-based-application/
 
 ### Source Code (repository root)
 ```
-# Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   ├── api/
-│   └── lib/
-│       ├── radio-control/
-│       ├── qpsk-modem/
-│       ├── mesh-router/
-│       ├── doc-manager/
-│       └── cert-authority/
-└── tests/
-    ├── contract/
-    ├── integration/
-    └── unit/
+# PWA Structure - Single Application
+public/                    # Static files served by server
+├── index.html            # PWA entry point
+├── manifest.json         # PWA manifest
+├── service-worker.js     # Service worker (compiled)
+└── assets/              # Icons, fonts, etc.
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
+src/                      # Source code (compiled to public/)
+├── components/          # React components
+│   ├── RadioControl/   # Radio interface components
+│   ├── MeshNetwork/    # Mesh visualization
+│   ├── Registration/   # User registration
+│   ├── PageEditor/     # Static page creation (Markdown/HTML)
+│   ├── FunctionEditor/ # Server function development UI
+│   ├── DataTable/      # Spreadsheet-like database interface
+│   └── AppCreator/    # Server app development UI
+├── lib/                # Core libraries (browser-compatible)
+│   ├── radio-control/  # Web Serial API wrapper
+│   ├── qpsk-modem/    # Web Audio API modulation
+│   ├── mesh-router/   # P2P routing protocol
+│   ├── signing/       # Request signing & verification
+│   ├── function-runtime/ # FaaS execution engine
+│   ├── orm/           # Simplified ORM for IndexedDB
+│   └── server-runtime/ # Server app execution engine
+├── services/          # Business logic
+│   ├── database/      # IndexedDB wrapper with ORM
+│   ├── crypto/        # Web Crypto API
+│   ├── content/       # Static pages vs functions manager
+│   └── http-radio/    # HTTP over radio protocol
+├── pages/             # Application pages
+├── workers/           # Web Workers
+│   ├── modem.worker.ts      # Audio processing
+│   ├── function.worker.ts   # Server function sandbox
+│   ├── server-app.worker.ts # Server app sandbox
+│   └── crypto.worker.ts     # Crypto operations
+├── service-worker.ts  # Service worker source
+└── index.tsx         # App entry point
+
+server/               # Minimal static server
+├── server.js        # Express static server
+└── data/           # Server-side data
+    ├── signing-list.json     # Read-only signing list
+    └── signing-list.json.sig # Signature
+
+tests/
+├── unit/           # Unit tests
+├── integration/    # Integration tests
+└── e2e/           # End-to-end tests
 ```
 
-**Structure Decision**: Option 2 (Web application) - frontend + backend architecture required for web UI and radio hardware integration
+**Structure Decision**: PWA with minimal static server - all functionality in the browser
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
-   - Research: Best practices for Web Audio API and QPSK implementation
-   - Research: CAT control protocols for common radio models (Icom, Yaesu, Kenwood)
+   - ✅ Research: Web Audio API QPSK/16-QAM implementation (COMPLETED)
+   - ✅ Research: CAT control protocols (COMPLETED - Icom, Yaesu, Kenwood, Flex)
    - Research: Mesh routing algorithms suitable for radio networks
-   - Research: FCC Part 97 compliance for digital modes
+   - ✅ Research: FCC 2024 rules - symbol rate limits removed (COMPLETED)
 
 2. **Generate and dispatch research agents**:
    ```
@@ -149,20 +181,34 @@ frontend/
 
 1. **Extract entities from feature spec** → `data-model.md`:
    - RadioStation: callsign, equipment model, connection status
-   - Document: id, content, metadata (frontmatter), retention policy
+   - StaticPage: path, content, format (markdown/html), metadata
+   - ServerFunction: path, code, handler, context API usage
+   - FunctionData: function_id, collection, data (via ORM)
+   - DataTable: name, schema, rows (spreadsheet interface)
    - Transmission: source, destination, payload, status, retry count
    - MeshNode: callsign, routing table, link quality metrics
    - Certificate: callsign, public key, signature, expiry
 
 2. **Generate API contracts** from functional requirements:
-   - POST /api/radio/connect - Connect to radio via CAT
-   - GET /api/radio/status - Get radio connection status
-   - POST /api/documents - Create/upload markdown document
-   - GET /api/documents/{id} - Retrieve document
-   - POST /api/transmit - Send document over radio
-   - GET /api/mesh/nodes - List mesh network nodes
-   - POST /api/mesh/request - Request document from mesh
-   - POST /api/certificates - Generate station certificate
+   - Static Pages:
+     - GET /pages/* - Serve static HTML/Markdown pages
+     - POST /pages/create - Create new static page
+   - Server Functions:
+     - GET /functions/* - Execute server function GET handler
+     - POST /functions/* - Execute server function POST handler
+     - PUT /functions/deploy - Deploy new server function
+   - Database Operations:
+     - GET /db/schema - Get database schema
+     - POST /db/query - Execute ORM query
+     - GET /db/table/{name} - Get table data for spreadsheet view
+     - PUT /db/table/{name} - Update table via spreadsheet interface
+   - Radio Operations:
+     - POST /radio/connect - Connect to radio via CAT
+     - GET /radio/status - Get radio connection status
+     - POST /transmit - Send HTTP over radio
+   - Mesh Operations:
+     - GET /mesh/nodes - List mesh network nodes
+     - POST /mesh/request - Request content from mesh
    - Output OpenAPI schema to `/contracts/`
 
 3. **Generate contract tests** from contracts:
@@ -222,7 +268,15 @@ frontend/
 - [x] Phase 1: Design complete (/plan command)
 - [x] Phase 2: Task planning complete (/plan command - describe approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
-- [ ] Phase 4: Implementation complete
+- [x] Phase 4: Implementation in progress
+  - ✅ QPSK/16-QAM modem (HoR-1000 to HoR-11200)
+  - ✅ Radio CAT control (Web Serial API)
+  - ✅ HTTP-over-Radio protocol with compression
+  - ✅ JSX-to-template compilation system
+  - ✅ Theming system (8 themes)
+  - ✅ Radio Control UI component
+  - ⏳ Mesh networking
+  - ⏳ Full UI integration
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:

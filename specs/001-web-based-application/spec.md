@@ -76,34 +76,37 @@ As a ham radio operator, I want to connect my radio equipment to a web applicati
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
-- **FR-001**: System MUST support connection to multiple radio models via CAT (Computer Aided Transceiver) control interface
-- **FR-002**: System MUST support audio input/output through radio sound interfaces for data transmission
-- **FR-003**: System MUST allow users to create, edit, and manage HTML pages with forms
-- **FR-004**: System MUST digitize HTML content into a format suitable for radio transmission
-- **FR-005**: System MUST transmit digitized content over connected radio equipment using HTTP protocol
-- **FR-006**: System MUST receive and decode HTTP transmissions from other stations
-- **FR-007**: System MUST implement mesh networking behavior for HTTP request/response forwarding between nodes
-- **FR-008**: System MUST handle HTTP requests from other nodes in the network
-- **FR-009**: System MUST forward HTTP traffic through intermediate nodes when direct connection is unavailable
-- **FR-010**: System MUST maintain file-based storage for HTML resources with URLs in format http://callsign.radio/path
-- **FR-011**: System MUST operate entirely offline without requiring internet connectivity
-- **FR-012**: System MUST authenticate stations using a distributed signing list similar to DMR ID databases
-- **FR-013**: System MUST use QPSK modulation for transmissions, compliant with FCC bandwidth regulations for HF bands
-- **FR-014**: System MUST support single operator model where each operator has full control of their own station
-- **FR-015**: System MUST implement adaptive retry protocols that adjust based on propagation conditions and transmission success rates
-- **FR-016**: System MUST maintain a local copy of the pre-distributed signing list for offline authentication
-- **FR-017**: System MUST verify signing list integrity using cryptographic signatures before use
-- **FR-018**: System MUST update signing list ONLY through secure out-of-band channels (NOT via radio)
-- **FR-019**: The server component MUST only serve the frontend application and read-only signing list
+- **FR-001**: System MUST be a Progressive Web App (PWA) that works fully offline after initial load
+- **FR-002**: System MUST use service workers to cache all application resources for offline operation
+- **FR-003**: System MUST use Web Serial API for direct radio CAT control from the browser
+- **FR-004**: System MUST use Web Audio API for audio input/output through radio sound interfaces
+- **FR-005**: System MUST allow users to create local "server applications" that handle HTTP requests
+- **FR-006**: System MUST enable creation of HTML forms that submit to local server apps via radio
+- **FR-007**: Local server apps MUST process form submissions and generate responses entirely client-side
+- **FR-008**: System MUST store server app logic and data locally in IndexedDB
+- **FR-009**: System MUST execute server app code in sandboxed JavaScript environments
+- **FR-010**: System MUST transmit and receive HTTP protocol over radio frequencies using QPSK
+- **FR-011**: System MUST implement mesh networking for HTTP request/response forwarding
+- **FR-012**: System MUST use IndexedDB for all local storage (pages, apps, routes, data)
+- **FR-013**: System MUST operate entirely offline after initial PWA installation
+- **FR-014**: System MUST authenticate stations using pre-distributed signing list in IndexedDB
+- **FR-015**: System MUST support single operator model with full local control
+- **FR-016**: System MUST implement adaptive retry protocols based on propagation conditions
+- **FR-017**: System MUST verify signing list integrity using Web Crypto API
+- **FR-018**: System MUST update signing list ONLY through secure channels (NOT via radio)
+- **FR-019**: The static server MUST only serve PWA files and read-only signing list
+- **FR-020**: System MUST allow each station to host multiple server apps on different paths
 
 ### Key Entities *(include if feature involves data)*
-- **Radio Station**: Represents a ham radio operator's setup including their radio equipment, callsign, and connection status
-- **HTML Resource**: HTML pages with forms served over radio via HTTP protocol
-- **Transmission**: Represents a digitized document being sent or received over radio, including metadata like sender, recipient, and status
-- **Network Node**: Represents a station in the mesh network, maintaining routing information and connectivity status
-- **HTTP Request**: Represents an HTTP request transmitted over radio
-- **Signing List**: Distributed database of verified station callsigns and public keys
-- **Route**: Represents the path through which documents are forwarded in the mesh network
+- **Radio Station**: Ham radio operator's setup with equipment, callsign, and connection status
+- **Local Server App**: JavaScript application that processes HTTP requests, stored and executed locally
+- **HTML Resource**: Static HTML pages with forms that submit to server apps
+- **Server App Endpoint**: Path-based route handled by a local server app (e.g., /contact, /guestbook)
+- **App Data Store**: IndexedDB collection for server app's persistent data
+- **HTTP Request/Response**: HTTP traffic transmitted over radio between stations
+- **Network Node**: Station in the mesh network with routing information
+- **Signing List**: Pre-distributed database of verified station callsigns and public keys
+- **Route**: Path through which HTTP traffic is forwarded in the mesh network
 
 ---
 
