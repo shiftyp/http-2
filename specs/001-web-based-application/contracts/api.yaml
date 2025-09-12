@@ -1,0 +1,512 @@
+openapi: 3.0.0
+info:
+  title: Ham Radio Web Application API
+  version: 0.1.0
+  description: API for digital communication over amateur radio with mesh networking
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+paths:
+  /radio/connect:
+    post:
+      summary: Connect to radio via CAT control
+      tags: [Radio]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [port, baudRate, model]
+              properties:
+                port:
+                  type: string
+                  description: Serial port path
+                  example: "/dev/ttyUSB0"
+                baudRate:
+                  type: integer
+                  description: Serial baud rate
+                  example: 9600
+                model:
+                  type: string
+                  description: Radio model identifier
+                  example: "IC-7300"
+                audioInput:
+                  type: string
+                  description: Audio input device ID
+                audioOutput:
+                  type: string
+                  description: Audio output device ID
+                pttMethod:
+                  type: string
+                  enum: [CAT, RTS, DTR, VOX]
+                  default: CAT
+      responses:
+        200:
+          description: Successfully connected to radio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RadioStatus'
+        400:
+          description: Invalid configuration
+        500:
+          description: Connection failed
+
+  /radio/status:
+    get:
+      summary: Get radio connection status
+      tags: [Radio]
+      responses:
+        200:
+          description: Current radio status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RadioStatus'
+
+  /radio/disconnect:
+    post:
+      summary: Disconnect from radio
+      tags: [Radio]
+      responses:
+        200:
+          description: Successfully disconnected
+        500:
+          description: Disconnection failed
+
+  /documents:
+    get:
+      summary: List all documents
+      tags: [Documents]
+      parameters:
+        - name: callsign
+          in: query
+          schema:
+            type: string
+          description: Filter by callsign
+      responses:
+        200:
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentSummary'
+    
+    post:
+      summary: Create or upload a document
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filePath, content]
+              properties:
+                filePath:
+                  type: string
+                  description: Document file path
+                  example: "emergency/contact-list.md"
+                content:
+                  type: string
+                  description: Markdown content with optional frontmatter
+                retentionPolicy:
+                  type: string
+                  description: Document retention policy
+                  example: "30days"
+      responses:
+        201:
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        400:
+          description: Invalid document format
+        409:
+          description: Document already exists
+
+  /documents/{id}:
+    get:
+      summary: Retrieve a document
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Document ID (callsign:path format)
+      responses:
+        200:
+          description: Document content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        404:
+          description: Document not found
+    
+    delete:
+      summary: Delete a document
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Document deleted
+        404:
+          description: Document not found
+
+  /transmit:
+    post:
+      summary: Transmit a document over radio
+      tags: [Transmission]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentId, destination]
+              properties:
+                documentId:
+                  type: string
+                  description: Document to transmit
+                destination:
+                  type: string
+                  description: Target callsign or "CQ" for broadcast
+                  example: "KB2XYZ"
+                frequency:
+                  type: number
+                  description: Frequency in Hz (optional, uses current)
+                  example: 14074000
+      responses:
+        202:
+          description: Transmission queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transmission'
+        400:
+          description: Invalid parameters
+        404:
+          description: Document not found
+        503:
+          description: Radio not connected
+
+  /transmissions:
+    get:
+      summary: List transmission history
+      tags: [Transmission]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, transmitting, completed, failed, retrying]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        200:
+          description: Transmission list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transmission'
+
+  /transmissions/{id}:
+    get:
+      summary: Get transmission details
+      tags: [Transmission]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Transmission details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transmission'
+        404:
+          description: Transmission not found
+
+  /mesh/nodes:
+    get:
+      summary: List mesh network nodes
+      tags: [Mesh]
+      responses:
+        200:
+          description: List of known mesh nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MeshNode'
+
+  /mesh/request:
+    post:
+      summary: Request document from mesh network
+      tags: [Mesh]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentId]
+              properties:
+                documentId:
+                  type: string
+                  description: Document ID to request
+                source:
+                  type: string
+                  description: Specific node to request from (optional)
+      responses:
+        202:
+          description: Request sent to mesh
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  status:
+                    type: string
+        404:
+          description: Document not found in mesh
+        503:
+          description: Mesh network unavailable
+
+  /mesh/routes:
+    get:
+      summary: Get routing table
+      tags: [Mesh]
+      responses:
+        200:
+          description: Current routing table
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    destination:
+                      type: string
+                    nextHop:
+                      type: string
+                    metric:
+                      type: number
+                    hopCount:
+                      type: integer
+
+  /certificates:
+    post:
+      summary: Generate station certificate
+      tags: [Security]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [callsign, publicKey]
+              properties:
+                callsign:
+                  type: string
+                  description: Station callsign
+                publicKey:
+                  type: string
+                  description: RSA public key in PEM format
+      responses:
+        201:
+          description: Certificate generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        400:
+          description: Invalid request
+        409:
+          description: Certificate already exists
+
+  /certificates/{callsign}:
+    get:
+      summary: Get station certificate
+      tags: [Security]
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Station certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        404:
+          description: Certificate not found
+
+components:
+  schemas:
+    RadioStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        callsign:
+          type: string
+        model:
+          type: string
+        frequency:
+          type: number
+        mode:
+          type: string
+        signalStrength:
+          type: number
+        connectionStatus:
+          type: string
+          enum: [disconnected, connecting, connected, error]
+
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        callsign:
+          type: string
+        filePath:
+          type: string
+        title:
+          type: string
+        size:
+          type: integer
+        modified:
+          type: string
+          format: date-time
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        callsign:
+          type: string
+        filePath:
+          type: string
+        content:
+          type: string
+        frontmatter:
+          type: object
+        checksum:
+          type: string
+        size:
+          type: integer
+        retentionExpiry:
+          type: string
+          format: date-time
+
+    Transmission:
+      type: object
+      properties:
+        id:
+          type: string
+        documentId:
+          type: string
+        sourceCallsign:
+          type: string
+        destinationCallsign:
+          type: string
+        frequency:
+          type: number
+        mode:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, transmitting, completed, failed, retrying]
+        retryCount:
+          type: integer
+        errorRate:
+          type: number
+        acknowledgment:
+          type: boolean
+
+    MeshNode:
+      type: object
+      properties:
+        callsign:
+          type: string
+        lastHeard:
+          type: string
+          format: date-time
+        linkQuality:
+          type: number
+        hopCount:
+          type: integer
+        nextHop:
+          type: string
+        capabilities:
+          type: object
+          properties:
+            maxBandwidth:
+              type: number
+            supportedModes:
+              type: array
+              items:
+                type: string
+            meshVersion:
+              type: string
+        documentCount:
+          type: integer
+
+    Certificate:
+      type: object
+      properties:
+        id:
+          type: string
+        callsign:
+          type: string
+        publicKey:
+          type: string
+        signature:
+          type: string
+        issuer:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
