@@ -7,12 +7,104 @@ Object.defineProperty(global, 'crypto', {
   value: createMockWebCrypto()
 });
 
+// Mock IndexedDB
+class MockIDBRequest {
+  result: any = null;
+  onsuccess: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+  onupgradeneeded: ((event: any) => void) | null = null;
+}
+
+class MockIDBDatabase {
+  keyPairs = new Map<string, any>();
+  trustedKeys = new Map<string, any>();
+  objectStoreNames = {
+    contains: vi.fn((name: string) => name === 'keyPairs' || name === 'trustedKeys')
+  };
+
+  transaction = vi.fn((stores: string[], mode: string) => {
+    const self = this;
+    return {
+      objectStore: vi.fn((name: string) => ({
+        put: vi.fn((data: any) => {
+          const req = new MockIDBRequest();
+          if (name === 'keyPairs') {
+            self.keyPairs.set(data.callsign, data);
+          } else if (name === 'trustedKeys') {
+            self.trustedKeys.set(data.callsign, data);
+          }
+          setTimeout(() => req.onsuccess?.({}), 0);
+          return req;
+        }),
+        get: vi.fn((key: string) => {
+          const req = new MockIDBRequest();
+          if (name === 'keyPairs') {
+            req.result = self.keyPairs.get(key);
+          } else if (name === 'trustedKeys') {
+            req.result = self.trustedKeys.get(key);
+          }
+          setTimeout(() => req.onsuccess?.({}), 0);
+          return req;
+        }),
+        getAll: vi.fn(() => {
+          const req = new MockIDBRequest();
+          if (name === 'keyPairs') {
+            req.result = Array.from(self.keyPairs.values());
+          } else if (name === 'trustedKeys') {
+            req.result = Array.from(self.trustedKeys.values());
+          }
+          setTimeout(() => req.onsuccess?.({}), 0);
+          return req;
+        }),
+        delete: vi.fn((key: string) => {
+          const req = new MockIDBRequest();
+          if (name === 'keyPairs') {
+            self.keyPairs.delete(key);
+          } else if (name === 'trustedKeys') {
+            self.trustedKeys.delete(key);
+          }
+          setTimeout(() => req.onsuccess?.({}), 0);
+          return req;
+        })
+      }))
+    };
+  });
+
+  close = vi.fn();
+}
+
+const mockDatabase = new MockIDBDatabase();
+
+// @ts-ignore
+global.indexedDB = {
+  open: vi.fn(() => {
+    const req = new MockIDBRequest();
+    req.result = mockDatabase;
+    // Simulate async database open
+    setTimeout(() => {
+      if (req.onupgradeneeded) {
+        req.onupgradeneeded({ target: { result: mockDatabase } });
+      }
+      if (req.onsuccess) {
+        req.onsuccess({});
+      }
+    }, 0);
+    return req;
+  })
+};
+
 describe('CryptoManager', () => {
   let cryptoManager: CryptoManager;
 
   beforeEach(() => {
     cryptoManager = new CryptoManager();
     vi.clearAllMocks();
+    mockDatabase.keyPairs.clear();
+    mockDatabase.trustedKeys.clear();
+  });
+
+  afterEach(async () => {
+    await cryptoManager.close();
   });
 
   describe('Key Pair Generation', () => {
@@ -38,15 +130,16 @@ describe('CryptoManager', () => {
       expect(keyPair.expires).toBeCloseTo(expectedExpiry, -10000);
     });
 
-    it('should store key pair in localStorage', async () => {
-      const mockSetItem = vi.spyOn(Storage.prototype, 'setItem');
-      
-      await cryptoManager.generateKeyPair('N0CALL');
-      
-      expect(mockSetItem).toHaveBeenCalledWith(
-        'keypair_N0CALL',
-        expect.any(String)
-      );
+    it('should store key pair in IndexedDB', async () => {
+      const keyPair = await cryptoManager.generateKeyPair('N0CALL');
+
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockDatabase.keyPairs.has('N0CALL')).toBe(true);
+      const stored = mockDatabase.keyPairs.get('N0CALL');
+      expect(stored.callsign).toBe('N0CALL');
+      expect(stored.publicKeyPem).toBeDefined();
     });
   });
 
@@ -73,7 +166,7 @@ describe('CryptoManager', () => {
     });
 
     it('should handle expired key pairs', async () => {
-      // Mock expired key pair in localStorage
+      // Mock expired key pair in database
       const expiredKeyData = {
         publicKeyPem: '-----BEGIN PUBLIC KEY-----\nEXPIRED\n-----END PUBLIC KEY-----',
         privateKeyPem: '-----BEGIN PRIVATE KEY-----\nEXPIRED\n-----END PRIVATE KEY-----',
@@ -82,15 +175,15 @@ describe('CryptoManager', () => {
         expires: Date.now() - (365 * 24 * 60 * 60 * 1000) // 1 year ago
       };
 
-      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
-        JSON.stringify(expiredKeyData)
-      );
-      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {});
+      mockDatabase.keyPairs.set('EXPIRED', expiredKeyData);
+
+      // Trigger database open
+      if (mockRequest.onsuccess) mockRequest.onsuccess();
 
       const result = await cryptoManager.loadKeyPair('EXPIRED');
       
       expect(result).toBeNull();
-      expect(localStorage.removeItem).toHaveBeenCalledWith('keypair_EXPIRED');
+      expect(mockDatabase.keyPairs.has('EXPIRED')).toBe(false);
     });
   });
 
@@ -289,48 +382,57 @@ describe('CryptoManager', () => {
   });
 
   describe('Trust Management', () => {
-    it('should add trusted keys', () => {
+    it('should add trusted keys', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
-      
-      cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
 
-      const trustedKeys = cryptoManager.getTrustedKeys();
+      // Trigger database open
+      if (mockRequest.onsuccess) mockRequest.onsuccess();
+
+      await cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
+
+      const trustedKeys = await cryptoManager.getTrustedKeys();
       expect(trustedKeys['TRUSTED']).toBe(publicKeyPem);
     });
 
-    it('should remove trusted keys', () => {
+    it('should remove trusted keys', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
-      
-      cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
-      cryptoManager.removeTrustedKey('TRUSTED');
 
-      const trustedKeys = cryptoManager.getTrustedKeys();
+      // Trigger database open
+      if (mockRequest.onsuccess) mockRequest.onsuccess();
+
+      await cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
+      await cryptoManager.removeTrustedKey('TRUSTED');
+
+      const trustedKeys = await cryptoManager.getTrustedKeys();
       expect(trustedKeys['TRUSTED']).toBeUndefined();
     });
 
-    it('should persist trusted keys in localStorage', () => {
-      const mockSetItem = vi.spyOn(Storage.prototype, 'setItem');
+    it('should persist trusted keys in IndexedDB', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
-      
-      cryptoManager.addTrustedKey('PERSISTENT', publicKeyPem);
 
-      expect(mockSetItem).toHaveBeenCalledWith(
-        'trusted_keys',
-        expect.stringContaining('PERSISTENT')
-      );
+      // Trigger database open
+      if (mockRequest.onsuccess) mockRequest.onsuccess();
+
+      await cryptoManager.addTrustedKey('PERSISTENT', publicKeyPem);
+
+      expect(mockDatabase.trustedKeys.has('PERSISTENT')).toBe(true);
+      const stored = mockDatabase.trustedKeys.get('PERSISTENT');
+      expect(stored.publicKeyPem).toBe(publicKeyPem);
     });
 
-    it('should load trusted keys from localStorage', () => {
-      const trustedKeysData = {
-        'LOADED': '-----BEGIN PUBLIC KEY-----\nLOADED\n-----END PUBLIC KEY-----'
+    it('should load trusted keys from IndexedDB', async () => {
+      const trustedKeyData = {
+        callsign: 'LOADED',
+        publicKeyPem: '-----BEGIN PUBLIC KEY-----\nLOADED\n-----END PUBLIC KEY-----'
       };
 
-      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
-        JSON.stringify(trustedKeysData)
-      );
+      mockDatabase.trustedKeys.set('LOADED', trustedKeyData);
 
-      const keys = cryptoManager.getTrustedKeys();
-      expect(keys['LOADED']).toBe(trustedKeysData['LOADED']);
+      // Trigger database open
+      if (mockRequest.onsuccess) mockRequest.onsuccess();
+
+      const keys = await cryptoManager.getTrustedKeys();
+      expect(keys['LOADED']).toBe(trustedKeyData.publicKeyPem);
     });
   });
 

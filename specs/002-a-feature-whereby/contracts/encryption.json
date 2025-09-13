@@ -1,0 +1,170 @@
+{
+  "name": "Encryption Protocol",
+  "version": "1.0.0",
+  "description": "End-to-end encryption protocol for WebRTC data transfer",
+
+  "keyExchange": {
+    "algorithm": "ECDH",
+    "curve": "P-256",
+    "keyFormat": "SPKI",
+    "encoding": "base64"
+  },
+
+  "sessionEncryption": {
+    "algorithm": "AES-GCM",
+    "keyLength": 256,
+    "ivLength": 96,
+    "tagLength": 128
+  },
+
+  "messages": {
+    "KeyExchangeInit": {
+      "description": "Initiates key exchange",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["key-exchange-init"],
+          "required": true
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "Base64 encoded ECDH public key",
+          "required": true
+        },
+        "fingerprint": {
+          "type": "string",
+          "description": "SHA-256 fingerprint of public key for verification",
+          "required": true
+        },
+        "supportedAlgorithms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["AES-GCM-256", "AES-GCM-128"]
+          },
+          "required": true
+        }
+      }
+    },
+
+    "KeyExchangeResponse": {
+      "description": "Responds to key exchange",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["key-exchange-response"],
+          "required": true
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "Base64 encoded ECDH public key",
+          "required": true
+        },
+        "fingerprint": {
+          "type": "string",
+          "description": "SHA-256 fingerprint of public key",
+          "required": true
+        },
+        "selectedAlgorithm": {
+          "type": "string",
+          "enum": ["AES-GCM-256", "AES-GCM-128"],
+          "required": true
+        },
+        "test": {
+          "type": "string",
+          "description": "Encrypted test message to verify key derivation",
+          "required": true
+        }
+      }
+    },
+
+    "KeyExchangeConfirm": {
+      "description": "Confirms successful key exchange",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["key-exchange-confirm"],
+          "required": true
+        },
+        "success": {
+          "type": "boolean",
+          "required": true
+        },
+        "testResponse": {
+          "type": "string",
+          "description": "Decrypted test message",
+          "required": false
+        },
+        "error": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+
+    "KeyRotation": {
+      "description": "Rotates session keys",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["key-rotation"],
+          "required": true
+        },
+        "newPublicKey": {
+          "type": "string",
+          "description": "New ephemeral public key",
+          "required": true
+        },
+        "sequenceNumber": {
+          "type": "number",
+          "description": "Last chunk before rotation",
+          "required": true
+        }
+      }
+    }
+  },
+
+  "encryptedChunkFormat": {
+    "header": {
+      "version": { "type": "number", "size": 1 },
+      "flags": { "type": "number", "size": 1 },
+      "sequenceNumber": { "type": "number", "size": 4 },
+      "iv": { "type": "bytes", "size": 12 }
+    },
+    "payload": {
+      "description": "AES-GCM encrypted data",
+      "maxSize": 65536
+    },
+    "authTag": {
+      "type": "bytes",
+      "size": 16,
+      "description": "GCM authentication tag"
+    }
+  },
+
+  "keyDerivation": {
+    "function": "HKDF",
+    "hash": "SHA-256",
+    "salt": "ham-radio-transfer-v1",
+    "info": "session-key",
+    "outputLength": 32
+  },
+
+  "security": {
+    "keyRotationInterval": 104857600,
+    "keyRotationTime": 1800000,
+    "ephemeralKeys": true,
+    "forwardSecrecy": true,
+    "fingerprintVerification": "required"
+  },
+
+  "errorCodes": {
+    "CRYP_001": "Invalid public key format",
+    "CRYP_002": "Key exchange failed",
+    "CRYP_003": "Unsupported algorithm",
+    "CRYP_004": "Decryption failed",
+    "CRYP_005": "Authentication tag mismatch",
+    "CRYP_006": "Key rotation failed",
+    "CRYP_007": "Fingerprint mismatch"
+  }
+}
