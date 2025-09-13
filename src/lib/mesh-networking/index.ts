@@ -300,7 +300,7 @@ export class AODVRouter {
   }
 
   private generateMessageId(): string {
-    return `${this.myCallsign}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${this.myCallsign}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   private async broadcastRouteRequest(rreq: RouteRequest): Promise<void> {
@@ -609,7 +609,7 @@ export class MeshNetwork {
   }
 
   private generateMessageId(): string {
-    return `${this.myNode.callsign}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${this.myNode.callsign}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   // Public API

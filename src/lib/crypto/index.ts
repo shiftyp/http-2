@@ -27,6 +27,9 @@ export interface SignedRequest {
 export class CryptoManager {
   private keyPair: KeyPair | null = null;
   private trustedKeys: Map<string, CryptoKey> = new Map();
+  private db: IDBDatabase | null = null;
+  private dbName = 'ham-radio-crypto';
+  private dbVersion = 1;
 
   async generateKeyPair(callsign: string): Promise<KeyPair> {
     // Generate ECDSA key pair
@@ -56,6 +59,7 @@ export class CryptoManager {
     };
 
     // Store in IndexedDB
+    await this.ensureDatabase();
     await this.storeKeyPair(this.keyPair);
 
     return this.keyPair;
@@ -63,14 +67,13 @@ export class CryptoManager {
 
   async loadKeyPair(callsign: string): Promise<KeyPair | null> {
     try {
-      const stored = localStorage.getItem(`keypair_${callsign}`);
-      if (!stored) return null;
+      await this.ensureDatabase();
+      const data = await this.getFromDB('keyPairs', callsign);
+      if (!data) return null;
 
-      const data = JSON.parse(stored);
-      
       // Check expiration
       if (data.expires < Date.now()) {
-        localStorage.removeItem(`keypair_${callsign}`);
+        await this.deleteFromDB('keyPairs', callsign);
         return null;
       }
 
@@ -126,7 +129,7 @@ export class CryptoManager {
       expires: keyPair.expires
     };
 
-    localStorage.setItem(`keypair_${keyPair.callsign}`, JSON.stringify(data));
+    await this.saveToDatabase('keyPairs', data);
   }
 
   async signRequest(
@@ -283,7 +286,7 @@ export class CryptoManager {
     // Combine ephemeral key, IV, and encrypted data
     const result = {
       ephemeralKey: this.bufferToBase64(ephemeralPublicKey),
-      iv: this.bufferToBase64(iv),
+      iv: this.bufferToBase64(iv.buffer),
       data: this.bufferToBase64(encrypted)
     };
 
@@ -359,7 +362,7 @@ export class CryptoManager {
   private generateNonce(): string {
     const array = new Uint8Array(16);
     crypto.getRandomValues(array);
-    return this.bufferToBase64(array);
+    return this.bufferToBase64(array.buffer);
   }
 
   private bufferToPem(buffer: ArrayBuffer, type: string): string {
@@ -394,26 +397,117 @@ export class CryptoManager {
     return bytes.buffer;
   }
 
-  // Trust management
-  addTrustedKey(callsign: string, publicKeyPem: string): void {
-    const trustedKeys = JSON.parse(
-      localStorage.getItem('trusted_keys') || '{}'
-    );
-    trustedKeys[callsign] = publicKeyPem;
-    localStorage.setItem('trusted_keys', JSON.stringify(trustedKeys));
+  // IndexedDB helper methods
+  private async ensureDatabase(): Promise<void> {
+    if (this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.dbVersion);
+
+      request.onerror = () => {
+        reject(new Error('Failed to open crypto database'));
+      };
+
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+
+        // Create keyPairs store
+        if (!db.objectStoreNames.contains('keyPairs')) {
+          const keyPairStore = db.createObjectStore('keyPairs', { keyPath: 'callsign' });
+          keyPairStore.createIndex('expires', 'expires', { unique: false });
+        }
+
+        // Create trustedKeys store
+        if (!db.objectStoreNames.contains('trustedKeys')) {
+          db.createObjectStore('trustedKeys', { keyPath: 'callsign' });
+        }
+      };
+    });
   }
 
-  removeTrustedKey(callsign: string): void {
-    const trustedKeys = JSON.parse(
-      localStorage.getItem('trusted_keys') || '{}'
-    );
-    delete trustedKeys[callsign];
-    localStorage.setItem('trusted_keys', JSON.stringify(trustedKeys));
+  private async saveToDatabase(storeName: string, data: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.put(data);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error(`Failed to save to ${storeName}`));
+    });
+  }
+
+  private async getFromDB(storeName: string, key: string): Promise<any> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(key);
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(new Error(`Failed to get from ${storeName}`));
+    });
+  }
+
+  private async getAllFromDB(storeName: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error(`Failed to get all from ${storeName}`));
+    });
+  }
+
+  private async deleteFromDB(storeName: string, key: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.delete(key);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error(`Failed to delete from ${storeName}`));
+    });
+  }
+
+  // Trust management
+  async addTrustedKey(callsign: string, publicKeyPem: string): Promise<void> {
+    await this.ensureDatabase();
+    await this.saveToDatabase('trustedKeys', { callsign, publicKeyPem });
+  }
+
+  async removeTrustedKey(callsign: string): Promise<void> {
+    await this.ensureDatabase();
+    await this.deleteFromDB('trustedKeys', callsign);
     this.trustedKeys.delete(callsign);
   }
 
-  getTrustedKeys(): Record<string, string> {
-    return JSON.parse(localStorage.getItem('trusted_keys') || '{}');
+  async getTrustedKeys(): Promise<Record<string, string>> {
+    await this.ensureDatabase();
+    const keys = await this.getAllFromDB('trustedKeys');
+    const result: Record<string, string> = {};
+    keys.forEach(k => {
+      result[k.callsign] = k.publicKeyPem;
+    });
+    return result;
+  }
+  async close(): Promise<void> {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
   }
 }
 

@@ -76,23 +76,78 @@ export class QPSKModem {
   constructor(config: ModemConfig) {
     this.config = config;
     this.mode = MODEM_MODES[config.mode];
-    this.audioContext = new AudioContext({ sampleRate: config.sampleRate });
-    this.sampleBuffer = new Float32Array(config.fftSize);
 
-    this.txGain = this.audioContext.createGain();
-    this.txGain.gain.value = 0.8;
+    // Check if AudioContext is available (for testing environments)
+    if (typeof AudioContext !== 'undefined') {
+      this.audioContext = new AudioContext({ sampleRate: config.sampleRate });
+      this.sampleBuffer = new Float32Array(config.fftSize);
 
-    this.rxGain = this.audioContext.createGain();
-    this.rxGain.gain.value = 1.0;
+      this.txGain = this.audioContext.createGain();
+      this.txGain.gain.value = 0.8;
 
-    this.analyser = this.audioContext.createAnalyser();
-    this.analyser.fftSize = config.fftSize;
-    this.analyser.smoothingTimeConstant = 0.8;
+      this.rxGain = this.audioContext.createGain();
+      this.rxGain.gain.value = 1.0;
+
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = config.fftSize;
+      this.analyser.smoothingTimeConstant = 0.8;
+    } else {
+      // Create mock objects for testing
+      this.audioContext = {
+        sampleRate: config.sampleRate,
+        state: 'running',
+        createGain: () => ({ gain: { value: 1 }, connect: () => {}, disconnect: () => {} }),
+        createAnalyser: () => ({
+          fftSize: config.fftSize,
+          smoothingTimeConstant: 0.8,
+          connect: () => {},
+          disconnect: () => {},
+          getFloatTimeDomainData: () => {}
+        }),
+        createOscillator: () => ({
+          frequency: { value: 1500 },
+          connect: () => {},
+          disconnect: () => {},
+          start: () => {},
+          stop: () => {}
+        }),
+        createScriptProcessor: () => ({
+          connect: () => {},
+          disconnect: () => {},
+          onaudioprocess: null
+        }),
+        createBiquadFilter: () => ({
+          type: 'lowpass',
+          frequency: { value: 3000 },
+          Q: { value: 1 },
+          connect: () => {},
+          disconnect: () => {}
+        }),
+        createBuffer: (channels: number, length: number, sampleRate: number) => ({
+          numberOfChannels: channels,
+          length,
+          sampleRate,
+          getChannelData: () => new Float32Array(length)
+        }),
+        createBufferSource: () => ({
+          buffer: null,
+          connect: () => {},
+          disconnect: () => {},
+          start: () => {},
+          stop: () => {}
+        }),
+        destination: { connect: () => {} }
+      } as any;
+      this.sampleBuffer = new Float32Array(config.fftSize);
+      this.txGain = this.audioContext.createGain();
+      this.rxGain = this.audioContext.createGain();
+      this.analyser = this.audioContext.createAnalyser();
+    }
   }
 
   async init(): Promise<void> {
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume();
+    if (this.audioContext.state && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume?.();
     }
   }
 

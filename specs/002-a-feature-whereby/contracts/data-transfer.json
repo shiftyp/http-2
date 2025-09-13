@@ -1,0 +1,229 @@
+{
+  "name": "Data Transfer Protocol",
+  "version": "1.0.0",
+  "description": "Protocol for transferring station data over WebRTC data channels",
+
+  "messages": {
+    "TransferStart": {
+      "description": "Initiates data transfer",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["transfer-start"],
+          "required": true
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid",
+          "required": true
+        },
+        "dataTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["logbook", "messages", "contacts", "configuration", "private_keys"]
+          },
+          "required": true
+        },
+        "totalChunks": {
+          "type": "number",
+          "description": "Total number of chunks to expect",
+          "required": true
+        },
+        "totalBytes": {
+          "type": "number",
+          "description": "Total size in bytes",
+          "required": true
+        },
+        "encrypted": {
+          "type": "boolean",
+          "description": "Whether data is encrypted",
+          "required": true
+        },
+        "compressionType": {
+          "type": "string",
+          "enum": ["none", "gzip", "brotli"],
+          "required": true
+        }
+      }
+    },
+
+    "DataChunk": {
+      "description": "Individual data chunk",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["data-chunk"],
+          "required": true
+        },
+        "sequenceNumber": {
+          "type": "number",
+          "description": "Chunk sequence number (0-based)",
+          "required": true
+        },
+        "dataType": {
+          "type": "string",
+          "enum": ["logbook", "messages", "contacts", "configuration", "private_keys"],
+          "required": true
+        },
+        "data": {
+          "type": "ArrayBuffer",
+          "description": "Actual chunk data",
+          "maxSize": "65536",
+          "required": true
+        },
+        "checksum": {
+          "type": "string",
+          "description": "SHA-256 hash of data",
+          "required": true
+        },
+        "iv": {
+          "type": "string",
+          "description": "Initialization vector if encrypted",
+          "required": false
+        }
+      }
+    },
+
+    "ChunkAcknowledgment": {
+      "description": "Acknowledges receipt of chunk",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["chunk-ack"],
+          "required": true
+        },
+        "sequenceNumber": {
+          "type": "number",
+          "required": true
+        },
+        "received": {
+          "type": "boolean",
+          "required": true
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if not received",
+          "required": false
+        }
+      }
+    },
+
+    "TransferProgress": {
+      "description": "Progress update",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["progress"],
+          "required": true
+        },
+        "chunksReceived": {
+          "type": "number",
+          "required": true
+        },
+        "totalChunks": {
+          "type": "number",
+          "required": true
+        },
+        "bytesReceived": {
+          "type": "number",
+          "required": true
+        },
+        "currentDataType": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+
+    "TransferComplete": {
+      "description": "Transfer completion notification",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["transfer-complete"],
+          "required": true
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid",
+          "required": true
+        },
+        "success": {
+          "type": "boolean",
+          "required": true
+        },
+        "chunksTransferred": {
+          "type": "number",
+          "required": true
+        },
+        "bytesTransferred": {
+          "type": "number",
+          "required": true
+        },
+        "duration": {
+          "type": "number",
+          "description": "Transfer duration in milliseconds",
+          "required": true
+        },
+        "error": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+
+    "TransferCancel": {
+      "description": "Cancel ongoing transfer",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["transfer-cancel"],
+          "required": true
+        },
+        "reason": {
+          "type": "string",
+          "required": true
+        }
+      }
+    }
+  },
+
+  "dataFormats": {
+    "StationDataPackage": {
+      "description": "Complete station data package format",
+      "mimeType": "application/json",
+      "compression": "optional",
+      "encryption": "optional",
+      "schema": {
+        "version": { "type": "string", "required": true },
+        "exportedAt": { "type": "string", "format": "iso8601", "required": true },
+        "callsign": { "type": "string", "required": true },
+        "logbook": { "type": "object", "required": false },
+        "messages": { "type": "array", "required": false },
+        "contacts": { "type": "array", "required": false },
+        "configuration": { "type": "object", "required": false },
+        "privateKeys": { "type": "object", "required": false }
+      }
+    }
+  },
+
+  "constraints": {
+    "maxChunkSize": 65536,
+    "maxConcurrentTransfers": 1,
+    "chunkTimeout": 10000,
+    "sessionTimeout": 1800000,
+    "retryAttempts": 3
+  },
+
+  "errorCodes": {
+    "XFER_001": "Invalid chunk sequence",
+    "XFER_002": "Checksum mismatch",
+    "XFER_003": "Decryption failed",
+    "XFER_004": "Decompression failed",
+    "XFER_005": "Timeout waiting for chunk",
+    "XFER_006": "Session expired",
+    "XFER_007": "Transfer cancelled",
+    "XFER_008": "Storage quota exceeded"
+  }
+}
