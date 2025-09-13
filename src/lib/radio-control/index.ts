@@ -667,6 +667,69 @@ export class RadioControl {
   getCurrentStatus(): RadioStatus {
     return { ...this.status };
   }
+
+  /**
+   * Get current frequency in Hz
+   */
+  getFrequency(): number | undefined {
+    return this.status.frequency;
+  }
+
+  /**
+   * Get current mode
+   */
+  getMode(): string | undefined {
+    return this.status.mode;
+  }
+
+  /**
+   * Get current power output in watts
+   */
+  getPower(): number | undefined {
+    return this.status.power;
+  }
+
+  /**
+   * Get current SWR
+   */
+  getSWR(): number | undefined {
+    return this.status.swr;
+  }
+
+  /**
+   * Transmit data over radio
+   * This is a high-level method that handles PTT and data transmission
+   */
+  async transmit(data: Uint8Array): Promise<void> {
+    if (!this.status.connected) {
+      throw new Error('Radio not connected');
+    }
+
+    try {
+      // Key the transmitter
+      await this.setPTT(true);
+      
+      // Wait for TX to stabilize (100ms)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // In a real implementation, this would interface with the sound card
+      // to modulate and transmit the data
+      console.log(`Transmitting ${data.length} bytes`);
+      
+      // Simulate transmission time based on data rate
+      // Assuming ~1200 baud for packet radio
+      const transmissionTime = (data.length * 8 / 1200) * 1000;
+      await new Promise(resolve => setTimeout(resolve, transmissionTime));
+      
+      // Unkey the transmitter
+      await this.setPTT(false);
+      
+    } catch (error) {
+      // Make sure we unkey on error
+      await this.setPTT(false);
+      throw error;
+    }
+  }
 }
 
 // Export a singleton instance for the application

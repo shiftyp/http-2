@@ -1,0 +1,123 @@
+{
+  "name": "WebRTC Signaling Protocol",
+  "version": "1.0.0",
+  "description": "Protocol for establishing WebRTC connections via QR codes or shortcodes",
+
+  "messages": {
+    "ConnectionRequest": {
+      "description": "Initial connection request with SDP offer",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["offer"],
+          "required": true
+        },
+        "sdp": {
+          "type": "string",
+          "description": "Session Description Protocol offer",
+          "required": true
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "Sender's public key for encryption",
+          "required": false
+        },
+        "dataPreview": {
+          "type": "object",
+          "description": "Preview of data to be transferred",
+          "required": true,
+          "properties": {
+            "logbookEntries": { "type": "number" },
+            "messages": { "type": "number" },
+            "hasPrivateKeys": { "type": "boolean" },
+            "hasConfiguration": { "type": "boolean" },
+            "estimatedSize": { "type": "number" }
+          }
+        }
+      }
+    },
+
+    "ConnectionResponse": {
+      "description": "Response with SDP answer",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["answer"],
+          "required": true
+        },
+        "sdp": {
+          "type": "string",
+          "description": "Session Description Protocol answer",
+          "required": true
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "Receiver's public key for encryption",
+          "required": false
+        },
+        "accepted": {
+          "type": "boolean",
+          "description": "Whether transfer is accepted",
+          "required": true
+        }
+      }
+    },
+
+    "ICECandidate": {
+      "description": "ICE candidate for connection establishment",
+      "fields": {
+        "type": {
+          "type": "string",
+          "enum": ["ice-candidate"],
+          "required": true
+        },
+        "candidate": {
+          "type": "string",
+          "description": "ICE candidate string",
+          "required": true
+        },
+        "sdpMLineIndex": {
+          "type": "number",
+          "required": false
+        },
+        "sdpMid": {
+          "type": "string",
+          "required": false
+        }
+      }
+    }
+  },
+
+  "connectionCode": {
+    "QRCode": {
+      "description": "QR code format for connection",
+      "maxSize": "4096 bytes",
+      "encoding": "base64",
+      "format": {
+        "version": "string",
+        "type": "qr",
+        "offer": "compressed SDP offer",
+        "publicKey": "optional public key",
+        "preview": "data preview object"
+      }
+    },
+
+    "ShortCode": {
+      "description": "Human-readable shortcode",
+      "format": "6 alphanumeric characters",
+      "charset": "A-Z0-9 (case insensitive)",
+      "example": "ABC123",
+      "mapping": "Maps to full connection data stored locally"
+    }
+  },
+
+  "errorCodes": {
+    "CONN_001": "Invalid SDP offer",
+    "CONN_002": "Connection timeout",
+    "CONN_003": "Code expired",
+    "CONN_004": "Already connected",
+    "CONN_005": "Network error",
+    "CONN_006": "Transfer rejected",
+    "CONN_007": "Incompatible version"
+  }
+}
