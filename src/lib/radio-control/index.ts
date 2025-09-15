@@ -708,27 +708,41 @@ export class RadioControl {
     try {
       // Key the transmitter
       await this.setPTT(true);
-      
+
       // Wait for TX to stabilize (100ms)
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // In a real implementation, this would interface with the sound card
       // to modulate and transmit the data
       console.log(`Transmitting ${data.length} bytes`);
-      
+
       // Simulate transmission time based on data rate
       // Assuming ~1200 baud for packet radio
       const transmissionTime = (data.length * 8 / 1200) * 1000;
       await new Promise(resolve => setTimeout(resolve, transmissionTime));
-      
+
       // Unkey the transmitter
       await this.setPTT(false);
-      
+
     } catch (error) {
       // Make sure we unkey on error
       await this.setPTT(false);
       throw error;
     }
+  }
+
+  /**
+   * Start receiving data over radio
+   * In a real implementation, this would set up audio processing for demodulation
+   */
+  startReceive(onData: (data: Uint8Array) => void): void {
+    // In a real implementation, this would:
+    // 1. Set up Web Audio API for audio capture
+    // 2. Implement demodulation (PSK31, RTTY, etc.)
+    // 3. Call onData when valid data is received
+
+    // For testing, this is a no-op
+    console.log('Started receiving data over radio');
   }
 }
 

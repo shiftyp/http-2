@@ -1,0 +1,155 @@
+openapi: 3.0.0
+info:
+  title: Data Encoding API
+  version: 1.0.0
+  description: Protobuf encoding and decoding operations
+
+paths:
+  /internal/encode:
+    post:
+      summary: Encode data using protobuf schema
+      operationId: encodeData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schemaId
+                - data
+              properties:
+                schemaId:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+                data:
+                  type: object
+                  description: Data to encode
+                compression:
+                  type: string
+                  enum:
+                    - none
+                    - brotli
+                    - gzip
+                  default: brotli
+      responses:
+        '200':
+          description: Data encoded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinaryTransmission'
+        '404':
+          description: Schema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Data doesn't match schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /internal/decode:
+    post:
+      summary: Decode protobuf data using schema
+      operationId: decodeData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schemaId
+                - encodedData
+              properties:
+                schemaId:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+                encodedData:
+                  type: string
+                  format: base64
+                  description: Base64 encoded binary data
+                compression:
+                  type: string
+                  enum:
+                    - none
+                    - brotli
+                    - gzip
+      responses:
+        '200':
+          description: Data decoded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    description: Decoded data
+                  originalSize:
+                    type: integer
+                  decodedSize:
+                    type: integer
+        '404':
+          description: Schema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid encoded data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    BinaryTransmission:
+      type: object
+      required:
+        - schemaId
+        - encodedData
+        - compressionType
+        - originalSize
+        - encodedSize
+        - requiresSchema
+      properties:
+        schemaId:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        encodedData:
+          type: string
+          format: base64
+          description: Base64 encoded for transport
+        compressionType:
+          type: string
+          enum:
+            - none
+            - brotli
+            - gzip
+        originalSize:
+          type: integer
+          minimum: 0
+        encodedSize:
+          type: integer
+          minimum: 0
+        requiresSchema:
+          type: boolean
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

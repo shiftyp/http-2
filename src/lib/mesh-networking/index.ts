@@ -631,8 +631,14 @@ export class MeshNetwork {
       routes: this.router.getRoutingTable().length,
       queuedMessages: Array.from(this.messageQueue.values()).reduce((sum, q) => sum + q.length, 0),
       retryQueue: this.retryQueue.size,
-      metrics: this.myNode.metrics
+      metrics: this.myNode.metrics,
+      totalNodes: this.nodes.size // Expected by integration tests
     };
+  }
+
+  // Method expected by integration tests
+  async discoverRoute(destination: string): Promise<RoutingTableEntry | null> {
+    return await this.router.discoverRoute(destination);
   }
 
   setRelayEnabled(enabled: boolean): void {

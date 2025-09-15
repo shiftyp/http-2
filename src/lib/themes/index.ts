@@ -70,7 +70,6 @@ export const themes: Record<string, Theme> = {
       }
     },
     custom: {
-      textShadow: '0 0 5px currentColor',
       scanlines: true
     }
   },
@@ -110,7 +109,6 @@ export const themes: Record<string, Theme> = {
       }
     },
     custom: {
-      textShadow: '0 0 3px currentColor'
     }
   },
 
@@ -446,27 +444,13 @@ export class ThemeManager {
       `;
     }
 
-    // Text shadow/glow effect
-    if (custom.textShadow) {
-      css += `
-        body {
-          text-shadow: ${custom.textShadow};
-        }
-      `;
-    }
+    // Ensure no text shadows are applied
+    css += `
+      body, * {
+        text-shadow: none !important;
+      }
+    `;
 
-    // Neon glow effect
-    if (custom.glowEffect) {
-      css += `
-        .glow {
-          animation: neon-glow 1.5s ease-in-out infinite alternate;
-        }
-        @keyframes neon-glow {
-          from { text-shadow: 0 0 10px currentColor; }
-          to { text-shadow: 0 0 20px currentColor, 0 0 30px currentColor; }
-        }
-      `;
-    }
 
     // LCD effect
     if (custom.lcdEffect) {

@@ -38,7 +38,7 @@ class MockIDBDatabase {
         return {
           add: vi.fn((value: any, key?: any) => {
             const req = new MockIDBRequest();
-            const actualKey = key || value.id || Date.now();
+            const actualKey = key || value.id || value.path || value.callsign || Date.now();
             store.set(actualKey, value);
             req.result = actualKey;
             setTimeout(() => req.onsuccess?.({ target: { result: actualKey } }), 0);
@@ -46,7 +46,7 @@ class MockIDBDatabase {
           }),
           put: vi.fn((value: any, key?: any) => {
             const req = new MockIDBRequest();
-            const actualKey = key || value.id || value.callsign || Date.now();
+            const actualKey = key || value.id || value.path || value.callsign || Date.now();
             store.set(actualKey, value);
             req.result = actualKey;
             setTimeout(() => req.onsuccess?.({ target: { result: actualKey } }), 0);
@@ -106,8 +106,10 @@ const databases = new Map<string, MockIDBDatabase>();
 
 // @ts-ignore
 global.indexedDB = {
-  open: vi.fn((name: string, version: number) => {
+  open: (name: string, version: number) => {
+    console.log('Mock indexedDB.open called with:', name, version);
     const req = new MockIDBRequest();
+    console.log('Created MockIDBRequest:', req);
 
     if (!databases.has(name)) {
       databases.set(name, new MockIDBDatabase(name, version));
@@ -116,6 +118,7 @@ global.indexedDB = {
     const db = databases.get(name)!;
     req.result = db;
 
+    // Ensure the request object has the expected properties
     setTimeout(() => {
       if (req.onupgradeneeded) {
         req.onupgradeneeded({ target: { result: db } });
@@ -125,8 +128,19 @@ global.indexedDB = {
       }
     }, 0);
 
+    console.log('Returning MockIDBRequest:', req);
     return req;
-  })
+  },
+  deleteDatabase: () => {
+    const req = new MockIDBRequest();
+    setTimeout(() => {
+      if (req.onsuccess) {
+        req.onsuccess({ target: { result: null } });
+      }
+    }, 0);
+    return req;
+  },
+  databases: () => Promise.resolve([])
 };
 
 // Mock localStorage

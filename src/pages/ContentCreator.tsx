@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
 import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/Alert';
-import { RadioJSXCompiler, h } from '../lib/jsx-radio';
-import { HamRadioCompressor } from '../lib/compression';
+import PageBuilder from './PageBuilder';
+import { db } from '../lib/database';
 
 interface Page {
   id: string;
   path: string;
   title: string;
-  type: 'markdown' | 'html' | 'jsx';
+  type: 'html' | 'jsx' | 'page-builder';
   content: string;
   compressed?: any;
   sizeOriginal: number;
@@ -20,372 +19,234 @@ interface Page {
   lastModified: number;
 }
 
-const ContentCreator: React.FC = () => {
+// Content Creator Overview Component
+const ContentCreatorOverview: React.FC = () => {
   const [pages, setPages] = useState<Page[]>([]);
-  const [selectedPage, setSelectedPage] = useState<Page | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
-  const [path, setPath] = useState('');
-  const [type, setType] = useState<'markdown' | 'html' | 'jsx'>('markdown');
-  const [preview, setPreview] = useState('');
-  const [compressionStats, setCompressionStats] = useState<any>(null);
+  const [stats, setStats] = useState({
+    totalPages: 0,
+    totalSize: 0,
+    recentlyModified: 0
+  });
 
   useEffect(() => {
-    // Load pages from IndexedDB (placeholder)
-    const savedPages = localStorage.getItem('pages');
-    if (savedPages) {
-      setPages(JSON.parse(savedPages));
-    }
+    loadPages();
   }, []);
 
-  const savePage = () => {
-    const compiler = new RadioJSXCompiler();
-    const compressor = new HamRadioCompressor();
-
-    // Compile content based on type
-    let compiled = content;
-    let compressed: any;
-
-    if (type === 'markdown') {
-      // Convert markdown to HTML (simplified)
-      compiled = content
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*)\*/gim, '<em>$1</em>')
-        .replace(/\n\n/gim, '</p><p>')
-        .replace(/^/gim, '<p>')
-        .replace(/$/gim, '</p>');
-    } else if (type === 'jsx') {
-      // Compile JSX to compressed format
-      try {
-        const jsxElement = eval(content); // In production, use proper JSX parser
-        compressed = compiler.compile(jsxElement);
-        compiled = compiler.decompile(compressed);
-      } catch (e) {
-        console.error('JSX compilation error:', e);
-      }
-    }
-
-    // Compress HTML
-    if (!compressed) {
-      const compressedPayload = compressor.compressHTML(compiled);
-      compressed = compressedPayload;
-    }
-
-    const page: Page = {
-      id: selectedPage?.id || Date.now().toString(),
-      path: path.startsWith('/') ? path : `/${path}`,
-      title,
-      type,
-      content,
-      compressed,
-      sizeOriginal: new TextEncoder().encode(compiled).length,
-      sizeCompressed: JSON.stringify(compressed).length,
-      lastModified: Date.now()
-    };
-
-    // Update or add page
-    const updatedPages = selectedPage
-      ? pages.map(p => p.id === page.id ? page : p)
-      : [...pages, page];
-
-    setPages(updatedPages);
-    localStorage.setItem('pages', JSON.stringify(updatedPages));
-
-    // Update compression stats
-    setCompressionStats({
-      original: page.sizeOriginal,
-      compressed: page.sizeCompressed,
-      ratio: ((1 - page.sizeCompressed / page.sizeOriginal) * 100).toFixed(1)
-    });
-
-    // Clear form
-    setSelectedPage(page);
-    setEditMode(false);
-  };
-
-  const deletePage = (id: string) => {
-    const updatedPages = pages.filter(p => p.id !== id);
-    setPages(updatedPages);
-    localStorage.setItem('pages', JSON.stringify(updatedPages));
-    if (selectedPage?.id === id) {
-      setSelectedPage(null);
-      setContent('');
-      setTitle('');
-      setPath('');
-    }
-  };
-
-  const selectPage = (page: Page) => {
-    setSelectedPage(page);
-    setContent(page.content);
-    setTitle(page.title);
-    setPath(page.path);
-    setType(page.type);
-    setEditMode(false);
-    updatePreview(page.content, page.type);
-  };
-
-  const updatePreview = (content: string, type: 'markdown' | 'html' | 'jsx') => {
-    if (type === 'markdown') {
-      const html = content
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*)\*/gim, '<em>$1</em>')
-        .replace(/\n\n/gim, '</p><p>')
-        .replace(/^/gim, '<p>')
-        .replace(/$/gim, '</p>');
-      setPreview(html);
-    } else if (type === 'html') {
-      setPreview(content);
-    } else if (type === 'jsx') {
-      try {
-        const compiler = new RadioJSXCompiler();
-        // In production, use proper JSX parser
-        setPreview('<div>JSX Preview (requires compilation)</div>');
-      } catch (e) {
-        setPreview('<div>JSX Error</div>');
-      }
-    }
-  };
-
-  const newPage = () => {
-    setSelectedPage(null);
-    setContent('');
-    setTitle('');
-    setPath('');
-    setType('markdown');
-    setEditMode(true);
-    setPreview('');
-  };
-
-  const transmitPage = (page: Page) => {
-    // Dispatch event to transmit via radio
-    const event = new CustomEvent('transmit-content', {
-      detail: {
+  const loadPages = async () => {
+    try {
+      const allPages = await db.getAllPages();
+      setPages(allPages.map((page: any) => ({
+        id: page.id || page.path,
         path: page.path,
-        compressed: page.compressed,
-        metadata: {
-          title: page.title,
-          type: page.type,
-          size: page.sizeCompressed,
-          modified: page.lastModified
-        }
-      }
-    });
-    window.dispatchEvent(event);
+        title: page.title || 'Untitled',
+        type: page.type || 'html',
+        content: page.content || '',
+        sizeOriginal: page.content ? page.content.length : 0,
+        sizeCompressed: page.compressedSize || 0,
+        lastModified: page.lastModified || Date.now()
+      })));
+
+      setStats({
+        totalPages: allPages.length,
+        totalSize: allPages.reduce((sum: number, page: any) => sum + (page.content?.length || 0), 0),
+        recentlyModified: allPages.filter((page: any) =>
+          Date.now() - (page.lastModified || 0) < 24 * 60 * 60 * 1000
+        ).length
+      });
+    } catch (error) {
+      console.error('Failed to load pages:', error);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const formatTimeAgo = (timestamp: number): string => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Content Creator</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Content Creator</h1>
+          <p className="text-gray-400 mt-1">Create bandwidth-optimized content using visual components for radio transmission</p>
+        </div>
+        <div className="flex gap-3">
+          <Link to="/content/page-builder">
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              <span className="mr-2">🎨</span>
+              Visual Page Builder
+            </Button>
+          </Link>
+          <Button className="bg-green-600 hover:bg-green-700">
+            <span className="mr-2">⚙️</span>
+            Component Library
+          </Button>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-bold">Pages</h2>
-              <Button size="sm" variant="primary" onClick={newPage}>
-                New Page
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {pages.map(page => (
-                  <div
-                    key={page.id}
-                    className={`
-                      p-2 border rounded cursor-pointer transition-colors
-                      ${selectedPage?.id === page.id 
-                        ? 'border-blue-500 bg-blue-900/20' 
-                        : 'border-gray-700 hover:border-gray-600'}
-                    `}
-                    onClick={() => selectPage(page)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-bold text-sm">{page.title}</div>
-                        <div className="text-xs text-gray-400">{page.path}</div>
-                      </div>
-                      <Badge size="xs" variant="info">{page.type}</Badge>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {(page.sizeCompressed / 1024).toFixed(1)} KB compressed
-                    </div>
-                  </div>
-                ))}
-                {pages.length === 0 && (
-                  <Alert variant="info">
-                    No pages yet. Click "New Page" to create one.
-                  </Alert>
-                )}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Total Pages</p>
+                <p className="text-2xl font-bold">{stats.totalPages}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="text-3xl">📄</div>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="lg:col-span-3">
-          {editMode || selectedPage ? (
-            <Card>
-              <CardHeader>
-                <h2 className="text-xl font-bold">
-                  {editMode ? 'Create Page' : 'View Page'}
-                </h2>
-                <div className="flex gap-2">
-                  {!editMode && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => setEditMode(true)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="success"
-                        onClick={() => selectedPage && transmitPage(selectedPage)}
-                      >
-                        Transmit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => selectedPage && deletePage(selectedPage.id)}
-                      >
-                        Delete
-                      </Button>
-                    </>
-                  )}
-                  {editMode && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="success"
-                        onClick={savePage}
-                        disabled={!title || !path || !content}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          setEditMode(false);
-                          if (selectedPage) {
-                            selectPage(selectedPage);
-                          }
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  )}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Content Size</p>
+                <p className="text-2xl font-bold">{formatBytes(stats.totalSize)}</p>
+              </div>
+              <div className="text-3xl">💾</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Recent Updates</p>
+                <p className="text-2xl font-bold">{stats.recentlyModified}</p>
+              </div>
+              <div className="text-3xl">⏱️</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-xl font-semibold">Quick Actions</h2>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Link to="/content/page-builder" className="block">
+              <div className="p-4 border border-gray-700 rounded-lg hover:border-blue-500 transition-colors cursor-pointer">
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">🎨</div>
+                  <div>
+                    <h3 className="font-semibold">Visual Page Builder</h3>
+                    <p className="text-sm text-gray-400">Drag-and-drop interface for creating pages</p>
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {editMode ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="Title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="My Ham Radio Page"
-                      />
-                      <Input
-                        label="Path"
-                        value={path}
-                        onChange={(e) => setPath(e.target.value)}
-                        placeholder="/about"
-                      />
-                    </div>
-                    
-                    <Select
-                      label="Content Type"
-                      value={type}
-                      onChange={(e) => setType(e.target.value as any)}
-                      options={[
-                        { value: 'markdown', label: 'Markdown' },
-                        { value: 'html', label: 'HTML' },
-                        { value: 'jsx', label: 'JSX (React)' }
-                      ]}
-                    />
+              </div>
+            </Link>
 
+            <div className="p-4 border border-gray-700 rounded-lg hover:border-green-500 transition-colors cursor-pointer">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">⚙️</div>
+                <div>
+                  <h3 className="font-semibold">Component Library</h3>
+                  <p className="text-sm text-gray-400">Browse and manage reusable components</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border border-gray-700 rounded-lg hover:border-purple-500 transition-colors cursor-pointer">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">⚡</div>
+                <div>
+                  <h3 className="font-semibold">Templates</h3>
+                  <p className="text-sm text-gray-400">Start from pre-built templates</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Pages */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-xl font-semibold">Recent Pages</h2>
+        </CardHeader>
+        <CardContent>
+          {pages.length > 0 ? (
+            <div className="space-y-3">
+              {pages.slice(0, 5).map((page) => (
+                <div key={page.id} className="flex items-center justify-between p-3 border border-gray-700 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <Badge variant="secondary">{page.type.toUpperCase()}</Badge>
                     <div>
-                      <label className="text-sm text-gray-400">Content</label>
-                      <textarea
-                        className="w-full h-64 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white font-mono text-sm"
-                        value={content}
-                        onChange={(e) => {
-                          setContent(e.target.value);
-                          updatePreview(e.target.value, type);
-                        }}
-                        placeholder={
-                          type === 'markdown' ? '# Welcome\n\nThis is **markdown** content.' :
-                          type === 'html' ? '<h1>Welcome</h1>\n<p>This is HTML content.</p>' :
-                          '<div>\n  <h1>Welcome</h1>\n  <p>This is JSX content.</p>\n</div>'
-                        }
-                      />
+                      <h3 className="font-medium">{page.title}</h3>
+                      <p className="text-sm text-gray-400">{page.path} • {formatBytes(page.sizeOriginal)}</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm text-gray-400">Title</label>
-                        <div className="font-bold">{title}</div>
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-400">Path</label>
-                        <div className="font-mono">{path}</div>
-                      </div>
-                    </div>
-
-                    {compressionStats && (
-                      <Alert variant="success">
-                        Compressed from {(compressionStats.original / 1024).toFixed(1)} KB 
-                        to {(compressionStats.compressed / 1024).toFixed(1)} KB 
-                        ({compressionStats.ratio}% reduction)
-                      </Alert>
-                    )}
-
-                    <div>
-                      <label className="text-sm text-gray-400">Preview</label>
-                      <div 
-                        className="mt-2 p-4 border border-gray-700 rounded bg-gray-900"
-                        dangerouslySetInnerHTML={{ __html: preview }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400">Source ({type})</label>
-                      <pre className="mt-2 p-4 border border-gray-700 rounded bg-gray-900 text-xs overflow-x-auto">
-                        {content}
-                      </pre>
-                    </div>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-400">{formatTimeAgo(page.lastModified)}</span>
+                    <Button size="sm" className="bg-gray-600 hover:bg-gray-700">
+                      Edit
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              ))}
+            </div>
           ) : (
-            <Card>
-              <CardHeader>
-                <h2 className="text-xl font-bold">Select or Create a Page</h2>
-              </CardHeader>
-              <CardContent>
-                <Alert variant="info">
-                  Select a page from the list or click "New Page" to create content.
-                </Alert>
-              </CardContent>
-            </Card>
+            <Alert>
+              No pages created yet. Use the Visual Page Builder to create your first page!
+            </Alert>
           )}
-        </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Main ContentCreator router component
+const ContentCreator: React.FC = () => {
+  const location = useLocation();
+
+  return (
+    <div className="min-h-screen bg-background p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Navigation Breadcrumbs */}
+        <nav className="mb-6">
+          <div className="flex items-center space-x-2 text-sm">
+            <Link to="/content" className="text-blue-400 hover:text-blue-300">
+              Content
+            </Link>
+            {location.pathname !== '/content' && (
+              <>
+                <span className="text-gray-500">/</span>
+                <span className="text-gray-300">
+                  {location.pathname === '/content/page-builder' ? 'Page Builder' : 'Editor'}
+                </span>
+              </>
+            )}
+          </div>
+        </nav>
+
+        {/* Routes */}
+        <Routes>
+          <Route index element={<ContentCreatorOverview />} />
+          <Route path="page-builder" element={<PageBuilder />} />
+          <Route path="*" element={<Navigate to="/content" replace />} />
+        </Routes>
       </div>
     </div>
   );

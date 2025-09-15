@@ -1,0 +1,232 @@
+openapi: 3.0.0
+info:
+  title: Schema Cache Management API
+  version: 1.0.0
+  description: Session-based schema cache operations
+
+paths:
+  /internal/cache/get:
+    post:
+      summary: Retrieve schema from cache
+      operationId: getFromCache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schemaId
+              properties:
+                schemaId:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+      responses:
+        '200':
+          description: Schema found in cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CachedSchema'
+        '404':
+          description: Schema not in cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /internal/cache/set:
+    post:
+      summary: Store schema in cache
+      operationId: setInCache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schema
+              properties:
+                schema:
+                  $ref: '#/components/schemas/SchemaDefinition'
+      responses:
+        '200':
+          description: Schema cached successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cached:
+                    type: boolean
+                  evicted:
+                    type: array
+                    items:
+                      type: string
+                    description: Schema IDs evicted to make room
+        '400':
+          description: Cache operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /internal/cache/stats:
+    get:
+      summary: Get cache statistics
+      operationId: getCacheStats
+      responses:
+        '200':
+          description: Cache statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStats'
+
+  /internal/cache/clear:
+    post:
+      summary: Clear cache (session end)
+      operationId: clearCache
+      responses:
+        '200':
+          description: Cache cleared successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cleared:
+                    type: integer
+                    description: Number of schemas cleared
+
+  /internal/cache/has:
+    post:
+      summary: Check if schema exists in cache
+      operationId: hasInCache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schemaId
+              properties:
+                schemaId:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+      responses:
+        '200':
+          description: Cache check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                  hitCount:
+                    type: integer
+
+components:
+  schemas:
+    SchemaDefinition:
+      type: object
+      required:
+        - id
+        - version
+        - protoContent
+        - timestamp
+        - sourceCallsign
+        - dataType
+      properties:
+        id:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        version:
+          type: integer
+          minimum: 1
+        protoContent:
+          type: string
+        timestamp:
+          type: integer
+        sourceCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+        dataType:
+          type: string
+
+    CachedSchema:
+      allOf:
+        - $ref: '#/components/schemas/SchemaDefinition'
+        - type: object
+          properties:
+            hitCount:
+              type: integer
+              minimum: 0
+            lastAccessed:
+              type: integer
+              description: Unix timestamp of last access
+            size:
+              type: integer
+              description: Size in bytes
+
+    CacheStats:
+      type: object
+      required:
+        - sessionId
+        - maxSize
+        - currentSize
+        - schemaCount
+        - hitRate
+        - evictionPolicy
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        maxSize:
+          type: integer
+          description: Maximum cache size in bytes
+        currentSize:
+          type: integer
+          description: Current usage in bytes
+        schemaCount:
+          type: integer
+          description: Number of cached schemas
+        hitRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Cache hit rate (0-1)
+        evictionPolicy:
+          type: string
+          enum:
+            - LRU
+            - LFU
+            - FIFO
+        topSchemas:
+          type: array
+          items:
+            type: object
+            properties:
+              schemaId:
+                type: string
+              hitCount:
+                type: integer
+              dataType:
+                type: string
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

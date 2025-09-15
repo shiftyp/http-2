@@ -1,6 +1,4 @@
-// Use Node.js built-in zlib for compression in Node environment
-// In browser, we would use brotli-wasm
-import { gzipSync, gunzipSync } from 'zlib';
+// Browser-compatible compression using native APIs
 
 // Re-export JSX utilities from jsx-radio
 export { RadioJSXCompiler, h, Fragment, ComponentRegistry } from '../jsx-radio';
@@ -130,13 +128,13 @@ export class HamRadioCompressor {
     // Apply dictionary compression
     const compressed = this.applyDictionaryCompression(minified);
 
-    // Gzip compress if still large
+    // Browser-compatible compression if still large
     if (compressed.length > 1000) {
-      const gzipped = gzipSync(Buffer.from(compressed));
+      const compressed_data = this.browserCompress(compressed);
       return {
         type: 'full',
         encoding: 'brotli', // Keep as 'brotli' for compatibility
-        data: new Uint8Array(gzipped)
+        data: compressed_data
       };
     }
 
@@ -201,8 +199,8 @@ export class HamRadioCompressor {
       
       case 'full':
         if (payload.encoding === 'brotli') {
-          const decompressed = gunzipSync(Buffer.from(payload.data as Uint8Array));
-          return this.expandDictionary(decompressed.toString());
+          const decompressed = this.browserDecompress(payload.data as Uint8Array);
+          return this.expandDictionary(decompressed);
         }
         return this.expandDictionary(payload.data as string);
       
@@ -430,5 +428,98 @@ export class HamRadioCompressor {
       return payload.data.length;
     }
     return JSON.stringify(payload).length;
+  }
+
+  // Browser-compatible compression using CompressionStream API or fallback
+  private browserCompress(text: string): Uint8Array {
+    // For now, use a simple LZ-style compression that works in all browsers
+    // This is a fallback until CompressionStream is widely supported
+    return this.simpleLZCompress(text);
+  }
+
+  private browserDecompress(data: Uint8Array): string {
+    // Corresponding decompression
+    return this.simpleLZDecompress(data);
+  }
+
+  // Simple LZ77-style compression for browser compatibility
+  private simpleLZCompress(text: string): Uint8Array {
+    const result: number[] = [];
+    const textBytes = new TextEncoder().encode(text);
+    let i = 0;
+
+    while (i < textBytes.length) {
+      let bestMatch = { length: 0, distance: 0 };
+
+      // Look back up to 255 characters for matches
+      const lookback = Math.min(i, 255);
+      for (let distance = 1; distance <= lookback; distance++) {
+        let length = 0;
+        while (
+          i + length < textBytes.length &&
+          length < 255 &&
+          textBytes[i + length] === textBytes[i + length - distance]
+        ) {
+          length++;
+        }
+
+        if (length > bestMatch.length && length >= 3) {
+          bestMatch = { length, distance };
+        }
+      }
+
+      if (bestMatch.length > 0) {
+        // Emit match: [255, distance, length]
+        result.push(255, bestMatch.distance, bestMatch.length);
+        i += bestMatch.length;
+      } else {
+        // Emit literal
+        result.push(textBytes[i]);
+        i++;
+      }
+    }
+
+    return new Uint8Array(result);
+  }
+
+  private simpleLZDecompress(data: Uint8Array): string {
+    const result: number[] = [];
+    let i = 0;
+
+    while (i < data.length) {
+      if (data[i] === 255 && i + 2 < data.length) {
+        // Match: [255, distance, length]
+        const distance = data[i + 1];
+        const length = data[i + 2];
+
+        for (let j = 0; j < length; j++) {
+          result.push(result[result.length - distance]);
+        }
+        i += 3;
+      } else {
+        // Literal
+        result.push(data[i]);
+        i++;
+      }
+    }
+
+    return new TextDecoder().decode(new Uint8Array(result));
+  }
+
+  // Methods expected by integration tests
+  async compress(data: Uint8Array): Promise<Uint8Array> {
+    const text = new TextDecoder().decode(data);
+    const result = this.compressHTML(text);
+
+    // Convert the compressed result to Uint8Array
+    const serialized = JSON.stringify(result);
+    return new TextEncoder().encode(serialized);
+  }
+
+  async decompress(data: Uint8Array): Promise<Uint8Array> {
+    const text = new TextDecoder().decode(data);
+    const parsed = JSON.parse(text);
+    const decompressed = this.decompressHTML(parsed);
+    return new TextEncoder().encode(decompressed);
   }
 }

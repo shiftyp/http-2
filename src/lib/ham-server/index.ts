@@ -6,6 +6,8 @@
 import { logbook } from '../logbook';
 import { HamRadioCompressor } from '../compression';
 import { cryptoManager } from '../crypto';
+import { renderComponentForRadio, renderComponentFromRadio, ProtobufComponentData } from '../react-renderer';
+import React from 'react';
 
 export interface HTTPRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS';
@@ -22,9 +24,10 @@ export interface HTTPResponse {
   status: number;
   statusText: string;
   headers: Map<string, string>;
-  body: Buffer | string;
+  body: Buffer | string | ProtobufComponentData[];
   etag?: string;
   compressed?: boolean;
+  isProtobuf?: boolean;
 }
 
 export interface RouteHandler {
@@ -39,6 +42,8 @@ export interface ServerConfig {
   compressionThreshold: number;
   cacheDuration: number;
   requireSignatures: boolean;
+  useProtobuf: boolean;
+  componentRegistry: Record<string, React.ComponentType<any>>;
 }
 
 /**
@@ -60,6 +65,8 @@ export class HTTPServer {
       compressionThreshold: config.compressionThreshold || 1024,      // Compress responses > 1KB
       cacheDuration: config.cacheDuration || 300000,           // 5 minute cache
       requireSignatures: config.requireSignatures || false,        // Digital signatures optional
+      useProtobuf: config.useProtobuf || true,               // Enable protobuf by default
+      componentRegistry: config.componentRegistry || {},      // React components for protobuf
       gridSquare: config.gridSquare,
       qth: config.qth
     };
@@ -97,7 +104,9 @@ export class HTTPServer {
     console.log(`HTTP Server initialized for ${this.config.callsign}`);
     console.log(`Routes: ${this.getRouteCount()} registered`);
     console.log(`Compression: ${this.config.compressionThreshold} bytes threshold`);
+    console.log(`Protobuf: ${this.config.useProtobuf ? 'Enabled' : 'Disabled'}`);
     console.log(`Signatures: ${this.config.requireSignatures ? 'Required' : 'Optional'}`);
+    console.log(`Components: ${Object.keys(this.config.componentRegistry).length} registered`);
   }
   
   /**
@@ -127,6 +136,82 @@ export class HTTPServer {
    */
   use(middleware: (req: HTTPRequest, res: HTTPResponse) => void): void {
     this.middleware.push(middleware);
+  }
+
+  /**
+   * Register a React component for protobuf rendering
+   */
+  registerComponent(name: string, component: React.ComponentType<any>): void {
+    this.config.componentRegistry[name] = component;
+    console.log(`React component registered: ${name}`);
+  }
+
+  /**
+   * Render a React element to protobuf for radio transmission
+   */
+  async renderToProtobuf(element: React.ReactElement, componentType: string): Promise<ProtobufComponentData> {
+    if (!this.config.useProtobuf) {
+      throw new Error('Protobuf rendering disabled');
+    }
+
+    try {
+      return await renderComponentForRadio(
+        element.type as React.ComponentType<any>,
+        element.props,
+        { componentType }
+      );
+    } catch (error) {
+      console.error('Protobuf rendering failed:', error);
+      throw new Error(`Protobuf rendering failed: ${error}`);
+    }
+  }
+
+  /**
+   * Create a protobuf response for React components
+   */
+  async createProtobufResponse(
+    status: number,
+    statusText: string,
+    components: React.ReactElement[],
+    componentTypes?: string[]
+  ): Promise<HTTPResponse> {
+    if (!this.config.useProtobuf) {
+      throw new Error('Protobuf responses disabled');
+    }
+
+    try {
+      const protobufData: ProtobufComponentData[] = [];
+
+      for (let i = 0; i < components.length; i++) {
+        const component = components[i];
+        const componentType = componentTypes?.[i] || component.type.name || 'UnknownComponent';
+
+        const data = await this.renderToProtobuf(component, componentType);
+        protobufData.push(data);
+      }
+
+      const headers = new Map<string, string>();
+      headers.set('Content-Type', 'application/x-protobuf');
+      headers.set('Content-Encoding', 'protobuf');
+      headers.set('X-Component-Count', protobufData.length.toString());
+
+      // Calculate total size
+      const totalSize = protobufData.reduce((sum, data) => sum + data.compressedSize, 0);
+      headers.set('Content-Length', totalSize.toString());
+
+      return {
+        status,
+        statusText,
+        headers,
+        body: protobufData,
+        isProtobuf: true,
+        compressed: true
+      };
+    } catch (error) {
+      console.error('Protobuf response creation failed:', error);
+      return this.createResponse(500, 'Internal Server Error',
+        `Protobuf rendering failed: ${error}`);
+    }
   }
   
   /**
@@ -215,13 +300,20 @@ export class HTTPServer {
       response.headers.set('X-Server', 'Ham-HTTP/1.0');
       response.headers.set('Date', new Date().toUTCString());
       
-      // Compress if needed
-      if (response.body && 
-          Buffer.byteLength(response.body.toString()) > this.config.compressionThreshold) {
-        const compressed = this.compressor.compressHTML(response.body.toString());
-        response.body = JSON.stringify(compressed);
-        response.headers.set('Content-Encoding', 'ham-compressed');
-        response.compressed = true;
+      // Handle protobuf or traditional compression
+      if (response.body) {
+        if (response.isProtobuf) {
+          // Already compressed protobuf data
+          response.headers.set('Content-Encoding', 'protobuf');
+          response.headers.set('Content-Type', 'application/x-protobuf');
+          response.compressed = true;
+        } else if (Buffer.byteLength(response.body.toString()) > this.config.compressionThreshold) {
+          // Traditional HTML compression
+          const compressed = this.compressor.compressHTML(response.body.toString());
+          response.body = JSON.stringify(compressed);
+          response.headers.set('Content-Encoding', 'ham-compressed');
+          response.compressed = true;
+        }
       }
       
       // Generate ETag for caching
@@ -328,19 +420,56 @@ export class HTTPServer {
       const limit = parseInt(req.headers.get('X-Limit') || '100');
       const qsos = await logbook.findQSOs();
       const data = qsos.slice(0, limit);
-      
-      const response = this.createResponse(200, 'OK', JSON.stringify(data));
-      response.headers.set('Content-Type', 'application/json');
-      return response;
+
+      // Check if client supports protobuf
+      const acceptsProtobuf = req.headers.get('Accept')?.includes('application/x-protobuf');
+
+      if (this.config.useProtobuf && acceptsProtobuf) {
+        // Create React components for each QSO
+        const qsoComponents = data.map(qso =>
+          React.createElement(this.config.componentRegistry.QSOCard, {
+            callsign: qso.callsign,
+            frequency: qso.frequency,
+            mode: qso.mode,
+            rst: qso.rst,
+            notes: qso.notes
+          })
+        );
+
+        return await this.createProtobufResponse(200, 'OK', qsoComponents);
+      } else {
+        // Fallback to JSON
+        const response = this.createResponse(200, 'OK', JSON.stringify(data));
+        response.headers.set('Content-Type', 'application/json');
+        return response;
+      }
     });
     
     // Mesh nodes endpoint
     this.route('GET', '/api/mesh', async (req) => {
       const nodes = await logbook.getActiveNodes(1);
-      
-      const response = this.createResponse(200, 'OK', JSON.stringify(nodes));
-      response.headers.set('Content-Type', 'application/json');
-      return response;
+
+      // Check if client supports protobuf
+      const acceptsProtobuf = req.headers.get('Accept')?.includes('application/x-protobuf');
+
+      if (this.config.useProtobuf && acceptsProtobuf) {
+        // Create React components for each mesh node
+        const nodeComponents = nodes.map(node =>
+          React.createElement(this.config.componentRegistry.MeshNode, {
+            callsign: node.callsign,
+            gridSquare: node.gridSquare,
+            snr: node.snr,
+            lastSeen: node.lastSeen
+          })
+        );
+
+        return await this.createProtobufResponse(200, 'OK', nodeComponents);
+      } else {
+        // Fallback to JSON
+        const response = this.createResponse(200, 'OK', JSON.stringify(nodes));
+        response.headers.set('Content-Type', 'application/json');
+        return response;
+      }
     });
     
     // OPTIONS for CORS preflight
@@ -528,13 +657,39 @@ export class HTTPClient {
   }
 }
 
+// Default React components for ham radio
+const DefaultComponents = {
+  QSOCard: ({ callsign, frequency, mode, rst, notes }: any) => React.createElement('div', { className: 'qso-card' }, [
+    React.createElement('h3', { key: 'call' }, `QSO with ${callsign}`),
+    React.createElement('p', { key: 'freq' }, `Frequency: ${frequency} MHz`),
+    React.createElement('p', { key: 'mode' }, `Mode: ${mode}`),
+    React.createElement('p', { key: 'rst' }, `RST: ${rst}`),
+    notes && React.createElement('p', { key: 'notes' }, notes)
+  ].filter(Boolean)),
+
+  StatusUpdate: ({ status, timestamp, callsign }: any) => React.createElement('div', { className: 'status-update' }, [
+    React.createElement('strong', { key: 'call' }, callsign),
+    React.createElement('span', { key: 'time' }, ` - ${new Date(timestamp).toLocaleTimeString()}`),
+    React.createElement('p', { key: 'status' }, status)
+  ]),
+
+  MeshNode: ({ callsign, gridSquare, snr, lastSeen }: any) => React.createElement('div', { className: 'mesh-node' }, [
+    React.createElement('h4', { key: 'call' }, callsign),
+    React.createElement('p', { key: 'grid' }, `Grid: ${gridSquare}`),
+    React.createElement('p', { key: 'snr' }, `SNR: ${snr}dB`),
+    React.createElement('small', { key: 'seen' }, `Last seen: ${new Date(lastSeen).toLocaleString()}`)
+  ])
+};
+
 // Export singleton instances
 export const httpServer = new HTTPServer({
   callsign: 'NOCALL',
   maxBodySize: 8192,
   compressionThreshold: 1024,
   cacheDuration: 300000,
-  requireSignatures: false
+  requireSignatures: false,
+  useProtobuf: true,
+  componentRegistry: DefaultComponents
 });
 
 export const httpClient = new HTTPClient({

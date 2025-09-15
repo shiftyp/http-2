@@ -509,6 +509,60 @@ export class CryptoManager {
       this.db = null;
     }
   }
+
+  // Method expected by integration tests
+  async sign(data: string): Promise<string> {
+    if (!this.keyPair) {
+      throw new Error('No key pair loaded');
+    }
+
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+
+    const signature = await crypto.subtle.sign(
+      {
+        name: 'ECDSA',
+        hash: 'SHA-256'
+      },
+      this.keyPair.privateKey,
+      dataBuffer
+    );
+
+    return this.bufferToBase64(signature);
+  }
+
+  // Method expected by integration tests
+  async verify(data: string, signature: string, publicKeyPem: string): Promise<boolean> {
+    try {
+      const publicKey = await crypto.subtle.importKey(
+        'spki',
+        this.pemToBuffer(publicKeyPem, 'PUBLIC KEY'),
+        {
+          name: 'ECDSA',
+          namedCurve: 'P-256'
+        },
+        false,
+        ['verify']
+      );
+
+      const encoder = new TextEncoder();
+      const dataBuffer = encoder.encode(data);
+      const signatureBuffer = this.base64ToBuffer(signature);
+
+      return await crypto.subtle.verify(
+        {
+          name: 'ECDSA',
+          hash: 'SHA-256'
+        },
+        publicKey,
+        signatureBuffer,
+        dataBuffer
+      );
+    } catch (error) {
+      console.error('Signature verification failed:', error);
+      return false;
+    }
+  }
 }
 
 // Global crypto manager instance

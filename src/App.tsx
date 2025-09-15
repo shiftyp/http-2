@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import ContentCreator from './pages/ContentCreator';
+import PageBuilder from './pages/PageBuilder';
 import DatabaseManager from './pages/DatabaseManager';
 import RadioOps from './pages/RadioOps';
 import Browse from './pages/Browse';
 import Settings from './pages/Settings';
+import ProtobufTest from './pages/ProtobufTest';
 import InstallPrompt from './components/InstallPrompt/InstallPrompt';
 import { db } from './lib/database';
 import './App.css';
@@ -100,11 +102,19 @@ function App() {
                 </NavLink>
               </li>
               <li>
-                <NavLink 
+                <NavLink
                   to="/content"
                   className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
                 >
                   Content
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/page-builder"
+                  className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
+                >
+                  Page Builder
                 </NavLink>
               </li>
               <li>
@@ -124,7 +134,7 @@ function App() {
                 </NavLink>
               </li>
               <li>
-                <NavLink 
+                <NavLink
                   to="/browse"
                   className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
                 >
@@ -132,7 +142,15 @@ function App() {
                 </NavLink>
               </li>
               <li>
-                <NavLink 
+                <NavLink
+                  to="/protobuf-test"
+                  className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
+                >
+                  🧪 Protobuf Test
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
                   to="/settings"
                   className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
                 >
@@ -147,9 +165,11 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/content/*" element={<ContentCreator />} />
+            <Route path="/page-builder" element={<PageBuilder />} />
             <Route path="/database" element={<DatabaseManager />} />
             <Route path="/radio" element={<RadioOps />} />
             <Route path="/browse" element={<Browse />} />
+            <Route path="/protobuf-test" element={<ProtobufTest />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

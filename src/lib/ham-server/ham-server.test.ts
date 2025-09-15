@@ -44,6 +44,28 @@ vi.mock('../crypto', () => ({
   }
 }));
 
+vi.mock('../react-renderer', () => ({
+  renderComponentForRadio: vi.fn().mockResolvedValue({
+    componentType: 'TestComponent',
+    protobufData: new Uint8Array([1, 2, 3, 4]),
+    componentSchema: 'TestComponent_schema_123',
+    originalSize: 100,
+    compressedSize: 25,
+    ratio: 4.0
+  }),
+  renderComponentFromRadio: vi.fn().mockResolvedValue(undefined)
+}));
+
+vi.mock('react', () => ({
+  default: {
+    createElement: vi.fn((type, props, ...children) => ({
+      type,
+      props: { ...props, children },
+      key: props?.key
+    }))
+  }
+}));
+
 describe('HTTPServer', () => {
   let server: HTTPServer;
 
@@ -53,7 +75,11 @@ describe('HTTPServer', () => {
       maxBodySize: 8192,
       compressionThreshold: 1024,
       cacheDuration: 300000,
-      requireSignatures: false
+      requireSignatures: false,
+      useProtobuf: true,
+      componentRegistry: {
+        TestComponent: ({ text }: { text: string }) => ({ type: 'div', props: { children: text } })
+      }
     });
     vi.clearAllMocks();
   });
@@ -362,6 +388,63 @@ describe('HTTPServer', () => {
     });
   });
 
+  describe('Protobuf functionality', () => {
+    beforeEach(async () => {
+      await server.start();
+    });
+
+    it('should register React components', () => {
+      const TestComp = ({ text }: { text: string }) => ({ type: 'div', props: { children: text } });
+      expect(() => server.registerComponent('NewTestComponent', TestComp)).not.toThrow();
+    });
+
+    it('should render React element to protobuf', async () => {
+      const React = await import('react');
+      const element = React.default.createElement('div', { text: 'Hello World' });
+
+      const result = await server.renderToProtobuf(element, 'TestComponent');
+
+      expect(result).toEqual({
+        componentType: 'TestComponent',
+        protobufData: expect.any(Uint8Array),
+        componentSchema: 'TestComponent_schema_123',
+        originalSize: 100,
+        compressedSize: 25,
+        ratio: 4.0
+      });
+    });
+
+    it('should create protobuf response', async () => {
+      const React = await import('react');
+      const components = [
+        React.default.createElement('div', { text: 'Component 1' }),
+        React.default.createElement('div', { text: 'Component 2' })
+      ];
+
+      const response = await server.createProtobufResponse(200, 'OK', components);
+
+      expect(response.status).toBe(200);
+      expect(response.isProtobuf).toBe(true);
+      expect(response.headers.get('Content-Type')).toBe('application/x-protobuf');
+      expect(response.headers.get('Content-Encoding')).toBe('protobuf');
+      expect(response.headers.get('X-Component-Count')).toBe('2');
+    });
+
+    it('should throw error when protobuf disabled', async () => {
+      const nonProtobufServer = new HTTPServer({
+        callsign: 'KJ4ABC',
+        useProtobuf: false
+      });
+      await nonProtobufServer.start();
+
+      const React = await import('react');
+      const element = React.default.createElement('div', { text: 'test' });
+
+      await expect(nonProtobufServer.renderToProtobuf(element, 'TestComponent'))
+        .rejects.toThrow('Protobuf rendering disabled');
+    });
+  });
+
   describe('Default routes', () => {
     beforeEach(async () => {
       await server.start();
@@ -402,7 +485,7 @@ describe('HTTPServer', () => {
       expect(status.callsign).toBe('KJ4ABC');
     });
 
-    it('should have GET /api/log route', async () => {
+    it('should have GET /api/log route with JSON fallback', async () => {
       const request: HTTPRequest = {
         method: 'GET',
         path: '/api/log',
@@ -418,7 +501,27 @@ describe('HTTPServer', () => {
       expect(response.headers.get('Content-Type')).toBe('application/json');
     });
 
-    it('should have GET /api/mesh route', async () => {
+    it('should have GET /api/log route with protobuf response', async () => {
+      const request: HTTPRequest = {
+        method: 'GET',
+        path: '/api/log',
+        version: 'HTTP/1.1',
+        headers: new Map([
+          ['X-Limit', '50'],
+          ['Accept', 'application/x-protobuf']
+        ]),
+        callsign: 'TEST',
+        timestamp: Date.now(),
+        requestId: 'test-123-protobuf'
+      };
+
+      const response = await server.handleRequest(request);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/x-protobuf');
+      expect(response.isProtobuf).toBe(true);
+    });
+
+    it('should have GET /api/mesh route with JSON fallback', async () => {
       const request: HTTPRequest = {
         method: 'GET',
         path: '/api/mesh',
@@ -432,6 +535,23 @@ describe('HTTPServer', () => {
       const response = await server.handleRequest(request);
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toBe('application/json');
+    });
+
+    it('should have GET /api/mesh route with protobuf response', async () => {
+      const request: HTTPRequest = {
+        method: 'GET',
+        path: '/api/mesh',
+        version: 'HTTP/1.1',
+        headers: new Map([['Accept', 'application/x-protobuf']]),
+        callsign: 'TEST',
+        timestamp: Date.now(),
+        requestId: 'test-123-mesh-protobuf'
+      };
+
+      const response = await server.handleRequest(request);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/x-protobuf');
+      expect(response.isProtobuf).toBe(true);
     });
 
     it('should handle OPTIONS for CORS', async () => {

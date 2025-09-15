@@ -1,4 +1,4 @@
-// JSX Radio - React-compatible JSX renderer for ham radio
+// JSX Radio - React-compatible renderer optimized for radio transmission bandwidth
 import * as React from 'react';
 
 // Re-export React elements for compatibility

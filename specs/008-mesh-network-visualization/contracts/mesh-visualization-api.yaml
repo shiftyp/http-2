@@ -1,0 +1,465 @@
+openapi: 3.0.0
+info:
+  title: Mesh Network Visualization Internal API
+  version: 1.0.0
+  description: Internal API for mesh network visualization component integration
+
+paths:
+  /api/mesh/topology:
+    get:
+      summary: Get current network topology
+      operationId: getNetworkTopology
+      responses:
+        '200':
+          description: Current mesh network topology
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkTopology'
+
+  /api/mesh/stations:
+    get:
+      summary: Get all known stations
+      operationId: getStations
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, unreachable, all]
+          description: Filter stations by status
+        - name: includeMetrics
+          in: query
+          schema:
+            type: boolean
+          description: Include signal metrics in response
+      responses:
+        '200':
+          description: Array of station nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StationNode'
+
+  /api/mesh/stations/{callsign}:
+    get:
+      summary: Get specific station details
+      operationId: getStation
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Station callsign
+      responses:
+        '200':
+          description: Station node details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationNode'
+        '404':
+          description: Station not found
+
+  /api/mesh/links:
+    get:
+      summary: Get connection links
+      operationId: getConnectionLinks
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          description: Filter to active links only
+        - name: protocol
+          in: query
+          schema:
+            type: string
+          description: Filter by protocol
+      responses:
+        '200':
+          description: Array of connection links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConnectionLink'
+
+  /api/mesh/routes:
+    get:
+      summary: Get routing paths
+      operationId: getRoutePaths
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+          description: Filter routes from source station
+        - name: destination
+          in: query
+          schema:
+            type: string
+          description: Filter routes to destination station
+      responses:
+        '200':
+          description: Array of route paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoutePath'
+
+  /api/mesh/propagation/{callsign}:
+    get:
+      summary: Get RF propagation model for station
+      operationId: getRFPropagation
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Station callsign
+        - name: frequency
+          in: query
+          schema:
+            type: number
+          description: Specific frequency for propagation model
+      responses:
+        '200':
+          description: RF propagation data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFPropagation'
+
+  /api/mesh/traffic:
+    get:
+      summary: Get current traffic flows
+      operationId: getTrafficFlows
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Include only active flows
+      responses:
+        '200':
+          description: Array of traffic flows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrafficFlow'
+
+  /api/mesh/config:
+    get:
+      summary: Get visualization configuration
+      operationId: getVisualizationConfig
+      responses:
+        '200':
+          description: Current visualization settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualizationSettings'
+
+    put:
+      summary: Update visualization configuration
+      operationId: updateVisualizationConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualizationSettings'
+      responses:
+        '200':
+          description: Configuration updated
+        '400':
+          description: Invalid configuration
+
+components:
+  schemas:
+    NetworkTopology:
+      type: object
+      required:
+        - networkId
+        - stations
+        - links
+        - routes
+        - lastUpdate
+        - partitionCount
+      properties:
+        networkId:
+          type: string
+        stations:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/StationNode'
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionLink'
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutePath'
+        lastUpdate:
+          type: number
+          description: Unix timestamp
+        partitionCount:
+          type: integer
+          minimum: 1
+
+    StationNode:
+      type: object
+      required:
+        - callsign
+        - lastSeen
+        - status
+        - meshAddress
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,6}$'
+        coordinates:
+          $ref: '#/components/schemas/GPSCoordinates'
+        lastSeen:
+          type: number
+          description: Unix timestamp
+        equipmentInfo:
+          $ref: '#/components/schemas/StationEquipment'
+        status:
+          type: string
+          enum: [active, inactive, unreachable]
+        meshAddress:
+          type: string
+
+    GPSCoordinates:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        altitude:
+          type: number
+        accuracy:
+          type: number
+          minimum: 0
+        timestamp:
+          type: number
+
+    StationEquipment:
+      type: object
+      required:
+        - frequency
+        - mode
+        - power
+        - protocolVersion
+      properties:
+        frequency:
+          type: number
+          minimum: 1800000
+          maximum: 30000000
+        mode:
+          type: string
+        power:
+          type: number
+          minimum: 1
+          maximum: 1500
+        antenna:
+          type: string
+        protocolVersion:
+          type: string
+
+    ConnectionLink:
+      type: object
+      required:
+        - source
+        - destination
+        - connectionType
+        - signalQuality
+        - lastActive
+        - status
+      properties:
+        source:
+          type: string
+        destination:
+          type: string
+        connectionType:
+          type: string
+          enum: [rf, internet]
+        frequency:
+          type: number
+        protocol:
+          type: string
+          enum: [VARA, Winlink, PacketRadio, HTTP-QPSK]
+        signalQuality:
+          $ref: '#/components/schemas/SignalMetrics'
+        lastActive:
+          type: number
+        status:
+          type: string
+          enum: [active, standby, failed]
+
+    SignalMetrics:
+      type: object
+      required:
+        - snr
+        - signalStrength
+        - linkQuality
+      properties:
+        snr:
+          type: number
+          minimum: -30
+          maximum: 50
+        signalStrength:
+          type: number
+          minimum: -120
+          maximum: -40
+        linkQuality:
+          type: number
+          minimum: 0
+          maximum: 100
+        distance:
+          type: number
+          minimum: 0
+        pathLoss:
+          type: number
+          minimum: 0
+
+    RoutePath:
+      type: object
+      required:
+        - source
+        - destination
+        - hops
+        - totalHops
+        - pathQuality
+        - established
+        - isActive
+      properties:
+        source:
+          type: string
+        destination:
+          type: string
+        hops:
+          type: array
+          items:
+            type: string
+        totalHops:
+          type: integer
+          minimum: 1
+        pathQuality:
+          type: number
+          minimum: 0
+          maximum: 100
+        established:
+          type: number
+        isActive:
+          type: boolean
+
+    RFPropagation:
+      type: object
+      required:
+        - centerStation
+        - frequency
+        - power
+        - coverageRadius
+        - propagationModel
+        - terrainFactor
+      properties:
+        centerStation:
+          type: string
+        frequency:
+          type: number
+        power:
+          type: number
+        coverageRadius:
+          type: number
+          minimum: 0
+        propagationModel:
+          type: string
+          enum: [freeSpace, twoRay]
+        terrainFactor:
+          type: number
+          minimum: 0.1
+          maximum: 5.0
+
+    TrafficFlow:
+      type: object
+      required:
+        - linkId
+        - throughput
+        - packetCount
+        - direction
+        - protocol
+        - priority
+        - startTime
+      properties:
+        linkId:
+          type: string
+        throughput:
+          type: number
+          minimum: 0
+        packetCount:
+          type: integer
+          minimum: 0
+        direction:
+          type: string
+          enum: [bidirectional, sourceToDestination, destinationToSource]
+        protocol:
+          type: string
+        priority:
+          type: string
+          enum: [low, normal, high, emergency]
+        startTime:
+          type: number
+
+    VisualizationSettings:
+      type: object
+      required:
+        - showPropagation
+        - showTrafficFlows
+        - showSignalStrength
+        - showRouting
+        - colorScheme
+        - zoomLevel
+      properties:
+        showPropagation:
+          type: boolean
+        showTrafficFlows:
+          type: boolean
+        showSignalStrength:
+          type: boolean
+        showRouting:
+          type: boolean
+        colorScheme:
+          type: string
+          enum: [signal, hop-count, protocol]
+        zoomLevel:
+          type: number
+          minimum: 0.1
+          maximum: 10.0
+        centerCoordinates:
+          $ref: '#/components/schemas/GPSCoordinates'
+        timeRange:
+          type: number
+          minimum: 30
+          maximum: 3600

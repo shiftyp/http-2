@@ -51,8 +51,8 @@ export const DB_CONFIG: DBConfig = {
       name: 'meshNodes',
       keyPath: 'callsign',
       indexes: [
-        { name: 'by_lastSeen', keyPath: 'lastSeen' },
-        { name: 'by_signalStrength', keyPath: 'signalStrength' }
+        { name: 'by_last_heard', keyPath: 'lastHeard' },
+        { name: 'by_frequency', keyPath: 'frequency' }
       ]
     },
     {
@@ -62,102 +62,176 @@ export const DB_CONFIG: DBConfig = {
       indexes: [
         { name: 'by_from', keyPath: 'from' },
         { name: 'by_to', keyPath: 'to' },
-        { name: 'by_timestamp', keyPath: 'timestamp' },
-        { name: 'by_status', keyPath: 'status' }
+        { name: 'by_timestamp', keyPath: 'timestamp' }
       ]
     },
     {
-      name: 'qsoLog',
+      name: 'qsos',
       keyPath: 'id',
       autoIncrement: true,
       indexes: [
         { name: 'by_callsign', keyPath: 'callsign' },
-        { name: 'by_date', keyPath: 'date' },
-        { name: 'by_band', keyPath: 'band' },
-        { name: 'by_mode', keyPath: 'mode' }
+        { name: 'by_frequency', keyPath: 'frequency' },
+        { name: 'by_timestamp', keyPath: 'timestamp' }
+      ]
+    },
+    {
+      name: 'settings',
+      keyPath: 'key',
+      indexes: [
+        { name: 'by_category', keyPath: 'category' }
       ]
     },
     {
       name: 'certificates',
       keyPath: 'callsign',
       indexes: [
-        { name: 'by_expiry', keyPath: 'expiry' },
-        { name: 'by_issuer', keyPath: 'issuer' }
-      ]
-    },
-    {
-      name: 'settings',
-      keyPath: 'key'
-    },
-    {
-      name: 'cache',
-      keyPath: 'url',
-      indexes: [
-        { name: 'by_timestamp', keyPath: 'timestamp' },
-        { name: 'by_size', keyPath: 'size' }
+        { name: 'by_expires', keyPath: 'expiresAt' }
       ]
     }
   ]
 };
 
-/**
- * Database class - wraps the simpler Logbook API
- * Provides compatibility with existing code
- */
 export class Database {
   private initialized = false;
-  private config: DBConfig;
-  private messageCache: Map<string, any[]> = new Map();
-  private certificateCache: Map<string, any> = new Map();
-
-  constructor(config: DBConfig = DB_CONFIG) {
-    this.config = config;
-  }
+  private messageCache = new Map<string, any[]>();
 
   async init(): Promise<void> {
-    if (!this.initialized) {
+    if (this.initialized) return;
+
+    try {
+      // Initialize the logbook API
       await logbook.open();
       this.initialized = true;
+      console.log('Database initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      throw error;
     }
   }
 
-  // Pages operations
+  // Page operations
   async savePage(page: any): Promise<void> {
     await this.ensureInitialized();
+
     const pageEntry: PageEntry = {
       path: page.path || page.id,
       title: page.title || 'Untitled',
-      content: JSON.stringify(page),
+      content: page.content || '',
       lastUpdated: new Date().toISOString(),
       author: page.author
     };
+
     await logbook.savePage(pageEntry);
   }
 
   async getPage(path: string): Promise<any> {
     await this.ensureInitialized();
     const page = await logbook.getPage(path);
+
     if (!page) return null;
-    
+
+    // Try to parse content as JSON, fallback to raw content
     try {
       const parsed = JSON.parse(page.content);
-      return { ...parsed, path: page.path };
+      return {
+        ...parsed,
+        path: page.path,
+        lastModified: page.lastUpdated
+      };
     } catch {
-      return page;
+      return {
+        ...page,
+        lastModified: page.lastUpdated
+      };
     }
   }
 
   async getAllPages(): Promise<any[]> {
     await this.ensureInitialized();
     const pages = await logbook.listPages();
+
     return pages.map(page => {
       try {
         const parsed = JSON.parse(page.content);
-        return { ...parsed, path: page.path };
+        return {
+          ...parsed,
+          path: page.path,
+          lastModified: page.lastUpdated
+        };
       } catch {
-        return page;
+        return {
+          ...page,
+          lastModified: page.lastUpdated
+        };
       }
     });
+  }
+
+  async getAllServerApps(): Promise<any[]> {
+    await this.ensureInitialized();
+    const pages = await logbook.listPages();
+    return pages
+      .filter(page => page.path.startsWith('app:'))
+      .map(page => {
+        try {
+          return JSON.parse(page.content);
+        } catch {
+          return page;
+        }
+      });
+  }
+
+  async getActiveMeshNodes(): Promise<MeshNode[]> {
+    await this.ensureInitialized();
+    return await logbook.getActiveNodes(1); // Get nodes active in last hour
+  }
+
+  async getMessages(options: { limit?: number } = {}): Promise<any[]> {
+    await this.ensureInitialized();
+
+    // Get all message pages
+    const pages = await logbook.listPages();
+    let messages = pages
+      .filter(page => page.path.startsWith('msg:'))
+      .map(page => {
+        try {
+          return JSON.parse(page.content);
+        } catch {
+          return null;
+        }
+      })
+      .filter(msg => msg !== null);
+
+    // Sort by timestamp (newest first)
+    messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    // Apply limit
+    if (options.limit) {
+      messages = messages.slice(0, options.limit);
+    }
+
+    return messages;
+  }
+
+  async getQSOLog(options: { limit?: number } = {}): Promise<QSOEntry[]> {
+    await this.ensureInitialized();
+    const qsos = await logbook.findQSOs();
+    return qsos.slice(0, options.limit || 100);
+  }
+
+  async getCacheSize(): Promise<number> {
+    await this.ensureInitialized();
+    // Estimate cache size - this is approximate
+    const pages = await this.getAllPages();
+    const qsos = await this.getQSOLog();
+    return pages.length * 1024 + qsos.length * 256; // Rough estimate in bytes
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.init();
+    }
   }
 
   async deletePage(id: string): Promise<void> {
@@ -182,26 +256,12 @@ export class Database {
     await this.ensureInitialized();
     const app = await logbook.getPage(`app:${path}`);
     if (!app) return null;
-    
+
     try {
       return JSON.parse(app.content);
     } catch {
       return app;
     }
-  }
-
-  async getAllServerApps(): Promise<any[]> {
-    await this.ensureInitialized();
-    const pages = await logbook.listPages();
-    return pages
-      .filter(page => page.path.startsWith('app:'))
-      .map(page => {
-        try {
-          return JSON.parse(page.content);
-        } catch {
-          return page;
-        }
-      });
   }
 
   // Mesh Nodes operations
@@ -223,12 +283,6 @@ export class Database {
     return nodes.find(node => node.callsign === callsign);
   }
 
-  async getActiveMeshNodes(maxAge: number = 600000): Promise<any[]> {
-    await this.ensureInitialized();
-    const hoursAgo = maxAge / (60 * 60 * 1000);
-    return await logbook.getActiveNodes(hoursAgo);
-  }
-
   async cleanupStaleMeshNodes(maxAge: number = 3600000): Promise<void> {
     await this.ensureInitialized();
     const daysOld = maxAge / (24 * 60 * 60 * 1000);
@@ -240,7 +294,7 @@ export class Database {
     await this.ensureInitialized();
     message.timestamp = message.timestamp || Date.now();
     const messageId = `msg:${message.timestamp}:${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const messageEntry: PageEntry = {
       path: messageId,
       title: `Message from ${message.from} to ${message.to}`,
@@ -249,234 +303,181 @@ export class Database {
       author: message.from
     };
     await logbook.savePage(messageEntry);
-    
+
     // Update cache
     this.messageCache.clear();
   }
 
-  async getMessages(filter: { from?: string; to?: string; limit?: number }): Promise<any[]> {
+  async deleteMessage(messageId: string): Promise<void> {
     await this.ensureInitialized();
-    
-    // Get all message pages
-    const pages = await logbook.listPages();
-    let messages = pages
-      .filter(page => page.path.startsWith('msg:'))
-      .map(page => {
-        try {
-          return JSON.parse(page.content);
-        } catch {
-          return null;
-        }
-      })
-      .filter(msg => msg !== null);
-
-    // Apply filters
-    if (filter.from) {
-      messages = messages.filter(msg => msg.from === filter.from);
-    }
-    if (filter.to) {
-      messages = messages.filter(msg => msg.to === filter.to);
-    }
-
-    // Sort by timestamp (newest first)
-    messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-    // Apply limit
-    if (filter.limit) {
-      messages = messages.slice(0, filter.limit);
-    }
-
-    return messages;
+    // This would need to be implemented in logbook as deletePage
+    console.warn('Message deletion not yet implemented');
   }
 
-  async markMessageAsRead(id: number): Promise<void> {
-    // Messages are immutable in this simple system
-    console.log(`Message ${id} marked as read`);
+  async getMessage(messageId: string): Promise<any> {
+    await this.ensureInitialized();
+    const message = await logbook.getPage(messageId);
+    if (!message) return null;
+
+    try {
+      return JSON.parse(message.content);
+    } catch {
+      return message;
+    }
   }
 
   // QSO Log operations
-  async logQSO(qso: any): Promise<void> {
+  async saveQSO(qso: any): Promise<void> {
     await this.ensureInitialized();
+
     const qsoEntry: QSOEntry = {
       callsign: qso.callsign,
-      date: qso.date || new Date().toISOString().split('T')[0],
-      time: qso.time || new Date().toISOString().split('T')[1].split('.')[0],
-      frequency: qso.frequency || qso.freq,
-      mode: qso.mode,
-      rstSent: qso.rstSent || qso.rst_sent || '59',
-      rstReceived: qso.rstReceived || qso.rst_received || '59',
-      qth: qso.qth,
-      name: qso.name,
-      notes: qso.notes
+      frequency: qso.frequency,
+      mode: qso.mode || 'SSB',
+      rstSent: qso.rstSent || '59',
+      rstReceived: qso.rstReceived || '59',
+      timestamp: qso.timestamp || new Date().toISOString(),
+      gridSquare: qso.gridSquare,
+      notes: qso.notes,
+      power: qso.power
     };
-    await logbook.logQSO(qsoEntry);
+
+    await logbook.recordQSO(qsoEntry);
   }
 
-  async getQSOLog(filter?: { callsign?: string; band?: string; limit?: number }): Promise<any[]> {
+  // Settings operations - store as pages with settings: prefix
+  async saveSetting(key: string, value: any): Promise<void> {
     await this.ensureInitialized();
-    let qsos = await logbook.findQSOs(filter?.callsign);
-    
-    // Filter by band if specified
-    if (filter?.band) {
-      qsos = qsos.filter(qso => {
-        const freq = parseFloat(qso.frequency);
-        return this.getBand(freq) === filter.band;
-      });
+    const settingEntry: PageEntry = {
+      path: `settings:${key}`,
+      title: `Setting: ${key}`,
+      content: JSON.stringify({ key, value, timestamp: Date.now() }),
+      lastUpdated: new Date().toISOString(),
+      author: 'system'
+    };
+    await logbook.savePage(settingEntry);
+  }
+
+  async getSetting(key: string, defaultValue?: any): Promise<any> {
+    await this.ensureInitialized();
+    const setting = await logbook.getPage(`settings:${key}`);
+    if (!setting) return defaultValue;
+
+    try {
+      const parsed = JSON.parse(setting.content);
+      return parsed.value;
+    } catch {
+      return defaultValue;
     }
-
-    // Apply limit
-    if (filter?.limit) {
-      qsos = qsos.slice(0, filter.limit);
-    }
-
-    return qsos;
-  }
-
-  // Certificate operations - store as settings
-  async saveCertificate(cert: any): Promise<void> {
-    await this.ensureInitialized();
-    await logbook.saveSetting(`cert:${cert.callsign}`, cert);
-    this.certificateCache.set(cert.callsign, cert);
-  }
-
-  async getCertificate(callsign: string): Promise<any> {
-    await this.ensureInitialized();
-    
-    if (this.certificateCache.has(callsign)) {
-      return this.certificateCache.get(callsign);
-    }
-    
-    const cert = await logbook.getSetting(`cert:${callsign}`);
-    if (cert) {
-      this.certificateCache.set(callsign, cert);
-    }
-    return cert;
-  }
-
-  async getValidCertificates(): Promise<any[]> {
-    await this.ensureInitialized();
-    const now = Date.now();
-    const certs: any[] = [];
-    
-    // This is inefficient but works for small datasets
-    // In production, we'd need a better indexing system
-    const backup = await logbook.exportLogbook();
-    for (const [key, value] of Object.entries(backup.settings)) {
-      if (key.startsWith('cert:') && typeof value === 'object') {
-        const cert = value as any;
-        if (cert.expiry > now) {
-          certs.push(cert);
-        }
-      }
-    }
-    
-    return certs;
-  }
-
-  // Settings operations
-  async setSetting(key: string, value: any): Promise<void> {
-    await this.ensureInitialized();
-    await logbook.saveSetting(key, value);
-  }
-
-  async getSetting(key: string): Promise<any> {
-    await this.ensureInitialized();
-    return await logbook.getSetting(key);
   }
 
   async getAllSettings(): Promise<Record<string, any>> {
     await this.ensureInitialized();
-    const backup = await logbook.exportLogbook();
-    return backup.settings || {};
+    const pages = await logbook.listPages();
+    const settings: Record<string, any> = {};
+
+    pages
+      .filter(page => page.path.startsWith('settings:'))
+      .forEach(page => {
+        try {
+          const parsed = JSON.parse(page.content);
+          const key = page.path.replace('settings:', '');
+          settings[key] = parsed.value;
+        } catch {
+          // Skip invalid settings
+        }
+      });
+
+    return settings;
   }
 
-  // Cache operations - store as pages with cache prefix
-  async cacheContent(url: string, content: any, metadata?: any): Promise<void> {
+  async deleteSetting(key: string): Promise<void> {
     await this.ensureInitialized();
-    const cacheEntry: PageEntry = {
-      path: `cache:${url}`,
-      title: `Cache: ${url}`,
-      content: JSON.stringify({
-        url,
-        content,
-        timestamp: Date.now(),
-        size: new Blob([JSON.stringify(content)]).size,
-        ...metadata
-      }),
-      lastUpdated: new Date().toISOString()
+    // This would need to be implemented in logbook as deletePage
+    console.warn('Setting deletion not yet implemented');
+  }
+
+  // Certificate operations - store as pages with cert: prefix
+  async saveCertificate(cert: any): Promise<void> {
+    await this.ensureInitialized();
+    const certEntry: PageEntry = {
+      path: `cert:${cert.callsign || cert.id}`,
+      title: `Certificate: ${cert.callsign}`,
+      content: JSON.stringify(cert),
+      lastUpdated: new Date().toISOString(),
+      author: cert.callsign
     };
-    await logbook.savePage(cacheEntry);
+    await logbook.savePage(certEntry);
   }
 
-  async getCachedContent(url: string): Promise<any> {
+  async getCertificate(callsign: string): Promise<any> {
     await this.ensureInitialized();
-    const cached = await logbook.getPage(`cache:${url}`);
-    if (!cached) return null;
-    
+    const cert = await logbook.getPage(`cert:${callsign}`);
+    if (!cert) return null;
+
     try {
-      const data = JSON.parse(cached.content);
-      return data.content;
+      return JSON.parse(cert.content);
     } catch {
-      return null;
+      return cert;
     }
   }
 
-  async clearCache(olderThan?: number): Promise<void> {
-    await this.ensureInitialized();
-    if (olderThan) {
-      const daysOld = olderThan / (24 * 60 * 60 * 1000);
-      await logbook.cleanup(daysOld);
-    }
-    // Note: This will clear all old data, not just cache
-    console.log('Cache cleared');
-  }
-
-  async getCacheSize(): Promise<number> {
+  async getAllCertificates(): Promise<any[]> {
     await this.ensureInitialized();
     const pages = await logbook.listPages();
-    let totalSize = 0;
-    
-    for (const page of pages) {
-      if (page.path.startsWith('cache:')) {
-        totalSize += new Blob([page.content]).size;
+    return pages
+      .filter(page => page.path.startsWith('cert:'))
+      .map(page => {
+        try {
+          return JSON.parse(page.content);
+        } catch {
+          return page;
+        }
+      });
+  }
+
+  // Backup and restore operations
+  async exportData(): Promise<string> {
+    await this.ensureInitialized();
+    const data = {
+      pages: await logbook.listPages(),
+      qsos: await logbook.findQSOs(),
+      nodes: await logbook.getActiveNodes(24 * 365),
+      exportTimestamp: Date.now()
+    };
+
+    return JSON.stringify(data, null, 2);
+  }
+
+  async importData(jsonData: string): Promise<void> {
+    await this.ensureInitialized();
+    const data = JSON.parse(jsonData);
+
+    // Import pages
+    if (data.pages) {
+      for (const page of data.pages) {
+        await logbook.savePage(page);
       }
     }
-    
-    return totalSize;
-  }
 
-  // Database maintenance
-  async vacuum(): Promise<void> {
-    await this.ensureInitialized();
-    await logbook.cleanup(7); // Clean up data older than 7 days
-    console.log('Database maintenance completed');
-  }
+    // Import QSOs
+    if (data.qsos) {
+      for (const qso of data.qsos) {
+        await logbook.recordQSO(qso);
+      }
+    }
 
-  async exportData(): Promise<any> {
-    await this.ensureInitialized();
-    return await logbook.exportLogbook();
-  }
-
-  async importData(data: any): Promise<void> {
-    await this.ensureInitialized();
-    await logbook.importLogbook(data);
-  }
-
-  async clear(): Promise<void> {
-    // We can't easily clear everything, so just log a warning
-    console.warn('Database clear not fully implemented - please reload the app');
+    // Import nodes
+    if (data.nodes) {
+      for (const node of data.nodes) {
+        await logbook.recordNode(node);
+      }
+    }
   }
 
   close(): void {
     logbook.close();
     this.initialized = false;
-  }
-
-  // Helper methods
-  private async ensureInitialized(): Promise<void> {
-    if (!this.initialized) {
-      await this.init();
-    }
   }
 
   private getBand(frequency: number): string {
@@ -499,8 +500,8 @@ export class Database {
 // Global database instance
 export const db = new Database();
 
-// Initialize on module load
-if (typeof window !== 'undefined') {
+// Initialize on module load (except in test environment)
+if (typeof window !== 'undefined' && !import.meta.env?.VITEST) {
   db.init().then(() => {
     console.log('Database initialized');
   }).catch(err => {

@@ -1,20 +1,22 @@
 # HTTP Over Ham Radio 📻
 
-A Progressive Web Application (PWA) that enables HTTP communication over amateur radio networks using QPSK modulation, mesh routing, and extreme compression techniques.
+A Progressive Web Application (PWA) enabling HTTP communication over amateur radio networks using QPSK modulation, mesh routing, and visual content creation tools.
 
 ## 🎯 Overview
 
-HTTP Over Ham Radio transforms amateur radio into a digital communication network capable of transmitting web content, messages, and data between stations. Built as a browser-based PWA, it requires no server infrastructure and works completely offline.
+HTTP Over Ham Radio transforms amateur radio into a digital communication network capable of transmitting web content, messages, and data between stations. Built as a browser-based PWA with a visual page builder, it requires no server infrastructure and works completely offline.
 
 ### Key Features
 
-- **🚀 Adaptive QPSK Modem**: 750-8400 bps data rates with SNR-based adaptation
-- **🗜️ Extreme Compression**: 10-20x reduction using JSX-to-template compilation
-- **🌐 Mesh Networking**: AODV routing protocol for multi-hop communication
-- **🔒 Cryptographic Security**: ECDSA signatures and ECDH encryption
-- **📖 Digital Logbook**: Full QSO logging with ADIF export
-- **💾 Offline-First**: Complete PWA with Service Worker caching
-- **🔄 P2P Data Transfer**: WebRTC-based station migration (planned)
+- **🎨 Visual Page Builder**: Drag-and-drop interface for creating web content optimized for radio transmission
+- **📡 Adaptive QPSK Modem**: 750-14400 bps data rates with SNR-based adaptation and neural network optimization
+- **🗜️ Extreme Compression**: 10-20x reduction using JSX-to-template compilation and browser-compatible algorithms
+- **🌐 Mesh Networking**: AODV routing protocol for multi-hop communication with visualization
+- **🔒 Cryptographic Security**: ECDSA signatures and ECDH encryption using Web Crypto API
+- **📖 Digital Logbook**: Full QSO logging with ADIF export and IndexedDB storage
+- **💾 Offline-First**: Complete PWA with Service Worker caching and local data persistence
+- **🎛️ Radio Control**: CAT control via Web Serial API for Icom, Yaesu, and Kenwood radios
+- **🔄 WebRTC Transfer**: Peer-to-peer data transfer for local network station migration
 
 ## 🚦 Quick Start
 
@@ -23,6 +25,7 @@ HTTP Over Ham Radio transforms amateur radio into a digital communication networ
 - Modern web browser (Chrome, Edge, Firefox, Safari)
 - Amateur radio license (for transmission)
 - Compatible radio with CAT control (optional)
+- Web Serial API support (Chrome/Edge recommended)
 
 ### Installation
 
@@ -41,249 +44,190 @@ npm run dev
 npm run dev:https
 ```
 
-Open http://localhost:5173 in your browser
+Open http://localhost:3000 in your browser
 
 ### First Time Setup
 
 1. **Install as PWA**: Click "Install" when prompted or use browser menu
 2. **Enter Callsign**: Settings → Station Info → Enter your callsign
 3. **Connect Radio** (optional): Settings → Radio → Connect via Web Serial API
-4. **Create Content**: Use the built-in editor to create pages
-5. **Start Operating**: Send/receive content over radio!
+4. **Create Content**: Use the Visual Page Builder to create your first page
 
-## 📡 Radio Setup
+## 🏗️ Visual Page Builder
+
+The core of the system is the visual, component-based page builder:
+
+- **Drag & Drop Interface**: Create pages by dragging components onto a grid canvas
+- **Component Library**: Text, headings, images, forms, buttons, tables, and containers
+- **Property Editor**: Configure component properties and styles through modal interfaces
+- **Live Preview**: Real-time preview of your page as you build
+- **Compression Stats**: See bandwidth optimization in real-time
+- **Grid Layout**: Precise positioning using CSS Grid with visual indicators
+
+### Creating Your First Page
+
+1. Navigate to **Content Creator** → **Visual Page Builder**
+2. Drag components from the palette to the canvas
+3. Click components to edit their properties
+4. Save your page for radio transmission
+
+## 📡 Radio Integration
 
 ### Supported Radios
 
-The application supports radios with CAT control via Web Serial API:
+- **Icom**: IC-7300, IC-7610, IC-9700 (via USB/CI-V)
+- **Yaesu**: FT-991A, FT-710, FT-DX101 (via USB CAT)
+- **Kenwood**: TS-590, TS-890, TS-990 (via USB)
 
-- **Icom**: IC-7300, IC-9700, IC-705 (CI-V protocol)
-- **Yaesu**: FT-991A, FTDX10 (CAT protocol)
-- **Kenwood**: TS-890S, TS-590SG (PC protocol)
-- **Flex Radio**: 6400, 6600 (SmartSDR)
+### Audio Interface
 
-### Connection Steps
-
-1. Connect radio to computer via USB
-2. Click "Connect Radio" in the app
-3. Select the serial port when prompted
-4. Radio control is now enabled!
+- **Web Audio API**: Browser-based QPSK modulation/demodulation
+- **Adaptive Rates**: Automatic adjustment based on signal conditions
+- **Neural Networks**: TensorFlow.js-based adaptive demodulation for improved performance
 
 ### Frequency Plan
 
-| Band | Frequency | Mode | Data Rate |
-|------|-----------|------|-----------|
-| 20m | 14.070-14.095 MHz | QPSK | 750-2800 bps |
-| 40m | 7.070-7.125 MHz | QPSK | 750-2800 bps |
-| 2m | 144.600-144.650 MHz | 16-QAM | 5600-8400 bps |
+- **HF Bands**: 40m, 20m, 15m, 10m (SSB frequencies)
+- **VHF/UHF**: 2m, 70cm (FM frequencies)
+- **Bandwidth**: 2.8 kHz maximum per FCC regulations
 
-## 🏗️ Architecture
+## 🗜️ Compression Technology
 
-```
-┌─────────────────────────────────────────┐
-│         Progressive Web App             │
-├─────────────────────────────────────────┤
-│            React 18 UI                  │
-│  ┌──────────┐  ┌──────────┐            │
-│  │Dashboard │  │ Logbook  │            │
-│  └──────────┘  └──────────┘            │
-├─────────────────────────────────────────┤
-│         Core Libraries                  │
-│  ┌──────────┐  ┌──────────┐            │
-│  │   QPSK   │  │   Mesh   │            │
-│  │  Modem   │  │ Network  │            │
-│  └──────────┘  └──────────┘            │
-│  ┌──────────┐  ┌──────────┐            │
-│  │  Crypto  │  │Compress  │            │
-│  └──────────┘  └──────────┘            │
-├─────────────────────────────────────────┤
-│         Browser APIs                    │
-│  ┌──────────┐  ┌──────────┐            │
-│  │Web Serial│  │Web Audio │            │
-│  └──────────┘  └──────────┘            │
-│  ┌──────────┐  ┌──────────┐            │
-│  │ IndexedDB│  │Web Crypto│            │
-│  └──────────┘  └──────────┘            │
-└─────────────────────────────────────────┘
-```
+### Multi-Layer Compression
 
-## 📚 Documentation
+1. **JSX-to-Template**: React components compiled to 2-4 byte template IDs
+2. **Dictionary Compression**: Ham radio terms compressed to single characters
+3. **Browser Compression**: LZ77-style compression for large content
+4. **Bandwidth Optimization**: Target 2KB page size for rapid transmission
 
-### For Users
-- [User Guide](docs/USER_GUIDE.md) - Complete usage instructions
-- [Radio Setup](docs/RADIO_SETUP.md) - Connecting and configuring radios
-- [Mesh Networking](docs/MESH_GUIDE.md) - Setting up mesh networks
-- [FAQ](docs/FAQ.md) - Frequently asked questions
+### Compression Ratios
 
-### For Developers
-- [Architecture](docs/ARCHITECTURE.md) - System design and components
-- [API Reference](docs/API.md) - Library APIs and protocols
-- [Contributing](CONTRIBUTING.md) - How to contribute
-- [Testing](docs/TESTING.md) - Test coverage and strategies
+- **Typical Pages**: 85-95% size reduction
+- **Template Reuse**: 97-99% reduction for templated content
+- **Ham Radio Content**: 90-95% reduction using domain-specific dictionary
 
-## 🧪 Current Implementation Status
+## 🌐 Mesh Networking
 
-### ✅ Implemented Libraries (70% Test Coverage)
+### AODV Protocol
 
-- **qpsk-modem** - Adaptive QPSK modulation with SNR detection
-- **radio-control** - CAT control for major radio brands
-- **mesh-networking** - AODV routing protocol implementation
-- **ham-server** - HTTP/1.1 server for radio transport
-- **crypto** - ECDSA/ECDH cryptography with Web Crypto API
-- **compression** - Brotli/gzip with 10-20x compression ratios
-- **database** - IndexedDB wrapper for persistent storage
-- **logbook** - QSO logging with ADIF export
-- **jsx-radio** - React-to-template compiler for bandwidth optimization
+- **Route Discovery**: Automatic path finding between stations
+- **Multipath Support**: Load balancing across multiple routes
+- **Store-and-Forward**: Offline message delivery when stations reconnect
+- **Visualization**: Real-time network topology display
 
-### 🚧 In Development
+### Network Features
 
-- **webrtc-transfer** - P2P data transfer between stations
-- **qr-shortcode** - QR code connection establishment
-- **station-data** - Data export/import/merge
-- **transfer-crypto** - Encryption for P2P transfers
+- **Station Registry**: Automatic discovery and registration
+- **QR Codes**: Quick connection establishment
+- **Offline Sync**: Message queuing for disconnected operations
 
-## 💻 Development
+## 🔒 Security & Compliance
 
-### Available Scripts
+### FCC Part 97 Compliance
+
+- **No Content Encryption**: Only signatures for authenticity
+- **Station Identification**: Automatic callsign insertion every 10 minutes
+- **Bandwidth Limits**: Enforced 2.8 kHz maximum
+- **Transmission Logging**: All RF activity logged with timestamps
+
+### Cryptographic Features
+
+- **Digital Signatures**: ECDSA using P-256 curve for message authenticity
+- **Key Exchange**: ECDH for establishing secure channels (local network only)
+- **Certificate Management**: Self-signed certificates with callsign verification
+
+## 🧪 Testing
+
+### Test Coverage
+
+- **Unit Tests**: 70% coverage across core libraries
+- **Integration Tests**: End-to-end testing of protocol stack
+- **Contract Tests**: API compliance validation
+- **Performance Tests**: Compression and bandwidth optimization
+
+### Running Tests
 
 ```bash
-npm run dev              # Start development server
-npm run dev:https        # Start with HTTPS (for WebRTC)
-npm run build            # Build for production
-npm run preview          # Preview production build
-npm test                 # Run all tests (312 tests)
-npm run test:watch       # Run tests in watch mode
-npm run test:coverage    # Generate coverage report
-npm run lint             # Run ESLint
-npm run typecheck        # TypeScript type checking
+# All tests
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+
+# Integration tests only
+npm run test:integration
 ```
 
-### Project Structure
+## 📁 Project Structure
 
 ```
 src/
-├── lib/                 # Core libraries
-│   ├── qpsk-modem/     # Digital modulation
-│   ├── radio-control/   # CAT control
-│   ├── mesh-networking/ # AODV routing
-│   ├── crypto/         # Cryptography
-│   ├── compression/    # Data compression
-│   ├── database/       # Storage layer
-│   ├── logbook/        # QSO logging
-│   └── ham-server/     # HTTP server
-├── components/         # React components
-├── pages/             # Application pages
-├── services/          # API services
-└── workers/           # Service workers
-
-tests/                 # Test suites
-├── unit/             # Unit tests
-├── integration/      # Integration tests
-└── contract/         # Protocol tests
+├── lib/                      # Core libraries (70% test coverage)
+│   ├── compression/          # Browser-compatible compression ✅
+│   ├── crypto/              # ECDSA/ECDH cryptography ✅
+│   ├── database/            # IndexedDB wrapper ✅
+│   ├── logbook/             # QSO logging ✅
+│   ├── jsx-radio/           # React-to-radio renderer ✅
+│   ├── mesh-networking/     # AODV routing ✅
+│   ├── qpsk-modem/          # Adaptive QPSK with neural networks ✅
+│   ├── radio-control/       # CAT control ✅
+│   ├── webrtc-transfer/     # P2P data transfer ✅
+│   ├── qr-shortcode/        # Connection codes ✅
+│   └── station-data/        # Data export/import ✅
+├── components/              # React components
+│   ├── PageBuilder/         # Visual builder components ✅
+│   └── ui/                  # Base UI components ✅
+├── pages/                   # Application pages
+│   ├── PageBuilder.tsx      # Main visual builder ✅
+│   └── ContentCreator.tsx   # Content management ✅
+└── workers/                 # Service workers
 ```
 
-### Technology Stack
+## 🛠️ Development
 
-- **Frontend**: React 18, TypeScript 5, Tailwind CSS
-- **Build**: Vite, ESBuild
-- **Testing**: Vitest (312 tests, 70% coverage)
-- **PWA**: Service Workers, Web Manifest
-- **APIs**: Web Serial, Web Audio, Web Crypto, IndexedDB
-
-## 📦 Deployment
-
-### As a PWA
-
-The application can be deployed to any static hosting service:
+### Commands
 
 ```bash
-# Build for production
-npm run build
-
-# Deploy dist/ folder to:
-# - Netlify
-# - Vercel
-# - GitHub Pages
-# - AWS S3
-# - Any web server
+npm run dev              # Start Vite dev server
+npm run dev:https        # Start with HTTPS for WebRTC
+npm run build            # Build for production
+npm run preview          # Preview production build
+npm run lint             # Run ESLint
+npm run typecheck        # Run TypeScript checks
 ```
 
-### Installation
+### Technologies
 
-Users can install the PWA directly from their browser:
-1. Visit the deployed URL
-2. Click "Install" in the browser prompt
-3. App installs with offline support
+- **React 18**: Component-based UI with hooks
+- **TypeScript 5**: Full type safety
+- **Vite**: Fast development and building
+- **IndexedDB**: Client-side persistence
+- **Web APIs**: Serial, Audio, Crypto, WebRTC
+- **Service Workers**: Offline functionality
 
-## ⚖️ License & Compliance
+## 📜 License
 
-This project is licensed under the MIT License with additional requirements:
-
-### FCC Part 97 Compliance
-- ✅ No encryption of content (signatures only)
-- ✅ Station identification every 10 minutes
-- ✅ 2.8 kHz bandwidth limit maintained
-- ✅ All transmissions logged for records
-- ✅ Non-commercial use only
-
-### Amateur Radio Requirements
-- Valid amateur radio license required for transmission
-- Comply with your country's amateur radio regulations
-- Respect band plans and operating procedures
+Licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Code of conduct
-- Development setup
-- Testing requirements
-- Pull request process
+1. Fork the repository
+2. Create a feature branch
+3. Implement your changes with tests
+4. Ensure all tests pass: `npm test`
+5. Submit a pull request
 
-## 📊 Performance Metrics
+## 📞 Support
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| Compression Ratio | 10-20x | ✅ 15x average |
-| Test Coverage | 80% | 🟡 70% |
-| Bundle Size | <500KB | ✅ 380KB |
-| Time to Interactive | <3s | ✅ 2.1s |
-| Transmission Speed | 750-8400 bps | ✅ Achieved |
+- **GitHub Issues**: Bug reports and feature requests
+- **Amateur Radio**: QRZ.com or local repeaters
+- **Email**: Technical questions and support
 
-## 🛠️ Troubleshooting
+## 🏆 Amateur Radio Integration
 
-### Common Issues
+This project is designed for and by amateur radio operators. All transmission features comply with FCC Part 97 regulations. The visual page builder makes it easy to create bandwidth-optimized content for efficient over-the-air transmission.
 
-**Can't connect to radio**
-- Ensure radio is powered on and USB connected
-- Check browser supports Web Serial API (Chrome/Edge)
-- Try different baud rate in settings
-
-**Poor signal quality**
-- Adjust QPSK mode to lower data rate
-- Check antenna SWR
-- Increase transmit power (within legal limits)
-
-**Mesh network not discovering nodes**
-- Ensure all stations on same frequency
-- Check squelch settings
-- Verify mesh network key matches
-
-## 📞 Support & Community
-
-- **Documentation**: [/docs](./docs) folder
-- **Bug Reports**: [GitHub Issues](https://github.com/yourusername/http-2/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/http-2/discussions)
-- **Ham Radio Net**: Thursdays 8PM ET on 14.230 MHz
-
-## 🙏 Acknowledgments
-
-- Amateur Radio Digital Communications (ARDC)
-- JS8Call for protocol inspiration
-- AREDN for mesh networking concepts
-- All contributors and testers
-
----
-
-**73 DE The HTTP Over Ham Radio Team** 📡
-
-*Built with ❤️ for the amateur radio community*
+**73, and happy coding!** 📻

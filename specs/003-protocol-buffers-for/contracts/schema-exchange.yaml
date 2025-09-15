@@ -1,0 +1,242 @@
+openapi: 3.0.0
+info:
+  title: Schema Exchange API
+  version: 1.0.0
+  description: Protocol for exchanging schemas over ham radio
+
+paths:
+  /radio/schema/request:
+    post:
+      summary: Request missing schema from originating station
+      operationId: requestSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schemaId
+                - targetCallsign
+              properties:
+                schemaId:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+                targetCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+                priority:
+                  type: string
+                  enum:
+                    - low
+                    - normal
+                    - high
+                  default: normal
+      responses:
+        '202':
+          description: Schema request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaRequest'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /radio/schema/provide:
+    post:
+      summary: Provide requested schema to requesting station
+      operationId: provideSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - schema
+              properties:
+                requestId:
+                  type: string
+                  format: uuid
+                schema:
+                  $ref: '#/components/schemas/SchemaDefinition'
+      responses:
+        '200':
+          description: Schema provided successfully
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /radio/transmission/send:
+    post:
+      summary: Send data with optional schema over radio
+      operationId: sendTransmission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+                - targetCallsign
+              properties:
+                data:
+                  type: object
+                  description: Data to transmit
+                targetCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+                includeSchema:
+                  type: boolean
+                  default: false
+                  description: Whether to send schema first
+      responses:
+        '200':
+          description: Transmission sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransmissionPacket'
+        '400':
+          description: Transmission failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    SchemaRequest:
+      type: object
+      required:
+        - requestId
+        - schemaId
+        - requestingCallsign
+        - targetCallsign
+        - priority
+        - retryCount
+        - maxRetries
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        schemaId:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        requestingCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+        targetCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+        priority:
+          type: string
+          enum:
+            - low
+            - normal
+            - high
+        retryCount:
+          type: integer
+          minimum: 0
+        maxRetries:
+          type: integer
+          minimum: 1
+          default: 3
+
+    TransmissionPacket:
+      type: object
+      required:
+        - packetType
+        - sequence
+        - totalPackets
+        - checksum
+        - timestamp
+      properties:
+        packetType:
+          type: string
+          enum:
+            - schema
+            - data
+            - schema+data
+        sequence:
+          type: integer
+          minimum: 1
+        totalPackets:
+          type: integer
+          minimum: 1
+        schemaPayload:
+          $ref: '#/components/schemas/SchemaDefinition'
+        dataPayload:
+          $ref: '#/components/schemas/BinaryTransmission'
+        checksum:
+          type: string
+          pattern: '^[a-f0-9]{8}$'
+        timestamp:
+          type: integer
+
+    SchemaDefinition:
+      type: object
+      required:
+        - id
+        - version
+        - protoContent
+        - timestamp
+        - sourceCallsign
+        - dataType
+      properties:
+        id:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        version:
+          type: integer
+        protoContent:
+          type: string
+        timestamp:
+          type: integer
+        sourceCallsign:
+          type: string
+        dataType:
+          type: string
+
+    BinaryTransmission:
+      type: object
+      required:
+        - schemaId
+        - encodedData
+        - compressionType
+        - originalSize
+        - encodedSize
+      properties:
+        schemaId:
+          type: string
+        encodedData:
+          type: string
+          format: base64
+        compressionType:
+          type: string
+        originalSize:
+          type: integer
+        encodedSize:
+          type: integer
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

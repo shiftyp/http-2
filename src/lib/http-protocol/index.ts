@@ -1,9 +1,23 @@
 import { QPSKModem } from '../qpsk-modem';
 import { HamRadioCompressor } from '../compression';
+import { protocolBuffers } from '../protocol-buffers';
+
+export interface HTTPRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body?: any;
+}
+
+export interface HTTPResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body?: any;
+}
 
 export interface HTTPPacket {
   version: number;
-  type: 'request' | 'response' | 'delta' | 'stream';
+  type: 'request' | 'response' | 'delta' | 'stream' | 'schema';
   id: string;
   sequence: number;
   flags: {
@@ -12,8 +26,17 @@ export interface HTTPPacket {
     fragmented: boolean;
     lastFragment: boolean;
     deltaUpdate: boolean;
+    protobufEncoded?: boolean;
   };
   payload: Uint8Array;
+  header?: {
+    version: number;
+    type: 'REQUEST' | 'RESPONSE' | 'DELTA' | 'STREAM';
+    source: string;
+    destination: string;
+    timestamp: number;
+    sequence: number;
+  };
 }
 
 export interface VirtualDOM {
@@ -222,46 +245,148 @@ export class HTTPProtocol {
   private packetBuffer: Map<string, HTTPPacket[]> = new Map();
   private sequenceNumber: number = 0;
   private currentVDOM: VirtualDOM | null = null;
+  private callsign: string;
+  private requestHandler?: (request: HTTPRequest, respond: (response: HTTPResponse) => void) => void;
 
   constructor(modemConfig: any) {
     this.modem = new QPSKModem(modemConfig);
     this.compressor = new HamRadioCompressor();
     this.renderer = new ReactLikeRenderer();
+    this.callsign = modemConfig.callsign || 'UNKNOWN';
+  }
+
+  createPacket(type: 'REQUEST' | 'RESPONSE' | 'DELTA' | 'STREAM', payload: HTTPRequest | HTTPResponse, destination: string): HTTPPacket {
+    return {
+      version: 1,
+      type: type.toLowerCase() as HTTPPacket['type'],
+      id: this.generatePacketId(),
+      sequence: this.sequenceNumber++,
+      flags: {
+        compressed: false,
+        encrypted: false,
+        fragmented: false,
+        lastFragment: true,
+        deltaUpdate: false
+      },
+      payload: new TextEncoder().encode(JSON.stringify(payload)),
+      header: {
+        version: 1,
+        type,
+        source: this.callsign,
+        destination,
+        timestamp: Date.now(),
+        sequence: this.sequenceNumber - 1
+      }
+    };
+  }
+
+  async handlePacket(packet: HTTPPacket): Promise<void> {
+    if (packet.header && packet.header.type === 'REQUEST' && this.requestHandler) {
+      try {
+        const request = JSON.parse(new TextDecoder().decode(packet.payload)) as HTTPRequest;
+
+        const respond = (response: HTTPResponse) => {
+          const responsePacket = this.createPacket('RESPONSE', response, packet.header!.source);
+          responsePacket.sequence = packet.sequence; // Match request sequence
+          this.transmitPacket(responsePacket);
+        };
+
+        this.requestHandler(request, respond);
+      } catch (error) {
+        console.error('Error handling request packet:', error);
+      }
+    }
+  }
+
+  setRequestHandler(handler: (request: HTTPRequest, respond: (response: HTTPResponse) => void) => void): void {
+    this.requestHandler = handler;
   }
 
   async sendRequest(
     method: string,
     path: string,
     headers: Record<string, string>,
-    body?: any
+    body?: any,
+    useProtocolBuffers: boolean = false
   ): Promise<void> {
     const request = {
       method,
       path,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body || undefined,
       timestamp: Date.now()
     };
 
-    const payload = new TextEncoder().encode(JSON.stringify(request));
-    const compressed = this.compressor.compressHTML(new TextDecoder().decode(payload));
-    
-    const packet: HTTPPacket = {
-      version: 1,
-      type: 'request',
-      id: this.generatePacketId(),
-      sequence: this.sequenceNumber++,
-      flags: {
-        compressed: true,
-        encrypted: false,
-        fragmented: false,
-        lastFragment: true,
-        deltaUpdate: false
-      },
-      payload: compressed.data as Uint8Array
-    };
+    if (useProtocolBuffers && body) {
+      // Protocol buffer mode: send schema first, then encoded data
+      const schema = protocolBuffers.generateSchema(body, 'RequestData');
+      const schemaTransmission = protocolBuffers.createSchemaTransmission(schema);
 
-    await this.transmitPacket(packet);
+      // Send schema packet first
+      const schemaPayload = new TextEncoder().encode(JSON.stringify(schemaTransmission));
+      const schemaPacket: HTTPPacket = {
+        version: 1,
+        type: 'schema',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: false,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: true
+        },
+        payload: schemaPayload
+      };
+
+      await this.transmitPacket(schemaPacket);
+
+      // Encode the data using protocol buffers
+      const encoded = protocolBuffers.encode(body, schema.id);
+      const encodedPayload = encoded.data; // Use raw binary data
+
+      // Send data packet
+      const dataPacket: HTTPPacket = {
+        version: 1,
+        type: 'request',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: false,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: true
+        },
+        payload: encodedPayload
+      };
+
+      await this.transmitPacket(dataPacket);
+    } else {
+      // Standard JSON mode
+      const payload = new TextEncoder().encode(JSON.stringify(request));
+      const compressed = this.compressor.compressHTML(new TextDecoder().decode(payload));
+
+      const packet: HTTPPacket = {
+        version: 1,
+        type: 'request',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: true,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: false
+        },
+        payload: new TextEncoder().encode(JSON.stringify(compressed.compressed))
+      };
+
+      await this.transmitPacket(packet);
+    }
   }
 
   async sendResponse(
@@ -349,7 +474,7 @@ export class HTTPProtocol {
     const serialized = this.serializePacket(packet);
     
     // Fragment if too large
-    const maxPayloadSize = 256; // bytes per transmission
+    const maxPayloadSize = 2048; // bytes per transmission
     
     if (serialized.length > maxPayloadSize) {
       const fragments = this.fragmentPacket(serialized, maxPayloadSize);
@@ -389,7 +514,8 @@ export class HTTPProtocol {
       'request': 0x01,
       'response': 0x02,
       'delta': 0x03,
-      'stream': 0x04
+      'stream': 0x04,
+      'schema': 0x05
     };
     view.setUint8(1, typeMap[packet.type]);
     
@@ -409,6 +535,7 @@ export class HTTPProtocol {
     if (packet.flags.fragmented) flags |= 0x04;
     if (packet.flags.lastFragment) flags |= 0x08;
     if (packet.flags.deltaUpdate) flags |= 0x10;
+    if (packet.flags.protobufEncoded) flags |= 0x20;
     view.setUint8(12, flags);
     
     // Payload length (2 bytes)
@@ -449,15 +576,28 @@ export class HTTPProtocol {
   startReceive(onPacket: (packet: HTTPPacket) => void): void {
     this.modem.startReceive((data) => {
       const packet = this.deserializePacket(data);
-      
+
+      // Handle schema packets - cache but don't forward to application
+      if (packet.type === 'schema' && packet.flags.protobufEncoded) {
+        try {
+          const schemaTransmission = JSON.parse(new TextDecoder().decode(packet.payload));
+          if (schemaTransmission.schema) {
+            protocolBuffers.cacheSchema(schemaTransmission.schema);
+          }
+        } catch (error) {
+          console.warn('Failed to parse schema packet:', error);
+        }
+        return; // Don't forward schema packets to application
+      }
+
       if (packet.flags.fragmented) {
         // Store fragment
         if (!this.packetBuffer.has(packet.id)) {
           this.packetBuffer.set(packet.id, []);
         }
-        
+
         this.packetBuffer.get(packet.id)!.push(packet);
-        
+
         if (packet.flags.lastFragment) {
           // Reassemble
           const fragments = this.packetBuffer.get(packet.id)!;
@@ -488,7 +628,8 @@ export class HTTPProtocol {
       0x01: 'request',
       0x02: 'response',
       0x03: 'delta',
-      0x04: 'stream'
+      0x04: 'stream',
+      0x05: 'schema'
     };
     
     return {
@@ -501,7 +642,8 @@ export class HTTPProtocol {
         encrypted: !!(flags & 0x02),
         fragmented: !!(flags & 0x04),
         lastFragment: !!(flags & 0x08),
-        deltaUpdate: !!(flags & 0x10)
+        deltaUpdate: !!(flags & 0x10),
+        protobufEncoded: !!(flags & 0x20)
       },
       payload: data.slice(16, 16 + payloadLength)
     };
@@ -530,5 +672,57 @@ export class HTTPProtocol {
       },
       payload: combined
     };
+  }
+
+  // Methods expected by integration tests
+  encodeRequest(request: any): Uint8Array {
+    const packet = this.createPacket('REQUEST', request, 'destination');
+    return this.serializePacket(packet);
+  }
+
+  encodeResponse(response: any): Uint8Array {
+    const packet = this.createPacket('RESPONSE', response, 'destination');
+    return this.serializePacket(packet);
+  }
+
+  decodePacket(data: Uint8Array): any {
+    const packet = this.deserializePacket(data);
+    if (packet.payload) {
+      // Handle protocol buffer encoded data with raw binary
+      if (packet.flags.protobufEncoded && packet.type !== 'schema') {
+        try {
+          // For binary protobuf data, we need to reconstruct the EncodedMessage
+          // Since we sent raw binary data, we need to get the schema ID from context
+          // For now, let's try to decode all cached schemas until one works
+          const schemaIds = protocolBuffers.getCachedSchemaIds();
+
+          for (const schemaId of schemaIds) {
+            try {
+              const encodedMessage = {
+                schemaId: schemaId,
+                data: packet.payload,
+                compressed: false
+              };
+              const decoded = protocolBuffers.decode(encodedMessage);
+              return decoded;
+            } catch {
+              continue; // Try next schema
+            }
+          }
+
+          return { error: 'Protocol buffer decode failed: no matching schema found' };
+        } catch (error) {
+          return { error: `Protocol buffer decode failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+        }
+      }
+
+      try {
+        const jsonData = JSON.parse(new TextDecoder().decode(packet.payload));
+        return jsonData;
+      } catch {
+        return packet.payload;
+      }
+    }
+    return null;
   }
 }

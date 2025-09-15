@@ -1,0 +1,1200 @@
+openapi: 3.0.0
+info:
+  title: Visual Page Builder API
+  version: 1.0.0
+  description: Internal API for visual page builder operations
+
+paths:
+  /api/sites:
+    get:
+      summary: List all sites for callsign
+      operationId: listSites
+      parameters:
+        - name: callsign
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of sites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Site'
+
+    post:
+      summary: Create new site
+      operationId: createSite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+
+  /api/sites/{siteId}:
+    get:
+      summary: Get site details
+      operationId: getSite
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Site details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+
+    put:
+      summary: Update site
+      operationId: updateSite
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteRequest'
+      responses:
+        '200':
+          description: Site updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+
+    delete:
+      summary: Delete site
+      operationId: deleteSite
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Site deleted
+
+  /api/pages:
+    post:
+      summary: Create new page
+      operationId: createPage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePageRequest'
+      responses:
+        '201':
+          description: Page created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+
+  /api/pages/{pageId}:
+    get:
+      summary: Get page details
+      operationId: getPage
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Page details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+
+    put:
+      summary: Update page
+      operationId: updatePage
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePageRequest'
+      responses:
+        '200':
+          description: Page updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+
+    delete:
+      summary: Delete page
+      operationId: deletePage
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Page deleted
+
+  /api/pages/{pageId}/components:
+    post:
+      summary: Add component to page
+      operationId: addComponent
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddComponentRequest'
+      responses:
+        '201':
+          description: Component added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageComponent'
+
+  /api/pages/{pageId}/components/{componentId}:
+    put:
+      summary: Update component
+      operationId: updateComponent
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateComponentRequest'
+      responses:
+        '200':
+          description: Component updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageComponent'
+
+    delete:
+      summary: Remove component
+      operationId: removeComponent
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Component removed
+
+  /api/pages/{pageId}/components/{componentId}/move:
+    post:
+      summary: Move component to new position
+      operationId: moveComponent
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveComponentRequest'
+      responses:
+        '200':
+          description: Component moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageComponent'
+
+  /api/pages/{pageId}/preview:
+    get:
+      summary: Get page preview HTML
+      operationId: previewPage
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: compressed
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Page preview
+          content:
+            text/html:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/pages/{pageId}/validate:
+    post:
+      summary: Validate page bandwidth constraints
+      operationId: validatePage
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+  /api/templates:
+    get:
+      summary: List available templates
+      operationId: listTemplates
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [landing, blog, contact, gallery, custom]
+        - name: author
+          in: query
+          schema:
+            type: string
+        - name: isPublic
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PageTemplate'
+
+    post:
+      summary: Save page as template
+      operationId: createTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageTemplate'
+
+  /api/templates/{templateId}:
+    get:
+      summary: Get template details
+      operationId: getTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageTemplate'
+
+    delete:
+      summary: Delete template
+      operationId: deleteTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Template deleted
+
+  /api/pages/{pageId}/apply-template:
+    post:
+      summary: Apply template to page
+      operationId: applyTemplate
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyTemplateRequest'
+      responses:
+        '200':
+          description: Template applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+
+  /api/actions:
+    post:
+      summary: Create action binding
+      operationId: createAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateActionRequest'
+      responses:
+        '201':
+          description: Action created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionBinding'
+
+  /api/actions/{actionId}:
+    put:
+      summary: Update action binding
+      operationId: updateAction
+      parameters:
+        - name: actionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateActionRequest'
+      responses:
+        '200':
+          description: Action updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionBinding'
+
+    delete:
+      summary: Delete action binding
+      operationId: deleteAction
+      parameters:
+        - name: actionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Action deleted
+
+  /api/functions:
+    get:
+      summary: List available server functions
+      operationId: listFunctions
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [data, form, navigation, utility, custom]
+      responses:
+        '200':
+          description: List of functions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServerFunction'
+
+  /api/history/{pageId}:
+    get:
+      summary: Get edit history for page
+      operationId: getHistory
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sessionId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Edit history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditHistory'
+
+  /api/history/{pageId}/undo:
+    post:
+      summary: Undo last operation
+      operationId: undo
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation undone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UndoResult'
+
+  /api/history/{pageId}/redo:
+    post:
+      summary: Redo last undone operation
+      operationId: redo
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation redone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedoResult'
+
+components:
+  schemas:
+    Site:
+      type: object
+      required:
+        - id
+        - callsign
+        - name
+        - pages
+        - homePage
+      properties:
+        id:
+          type: string
+        callsign:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        pages:
+          type: array
+          items:
+            type: string
+        homePage:
+          type: string
+        globalStyles:
+          type: object
+        metadata:
+          $ref: '#/components/schemas/SiteMetadata'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SiteMetadata:
+      type: object
+      properties:
+        version:
+          type: string
+        totalSize:
+          type: integer
+        compressionRatio:
+          type: number
+        lastPublished:
+          type: string
+          format: date-time
+
+    Page:
+      type: object
+      required:
+        - id
+        - siteId
+        - slug
+        - title
+        - components
+        - layout
+      properties:
+        id:
+          type: string
+        siteId:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/PageComponent'
+        layout:
+          $ref: '#/components/schemas/GridLayout'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionBinding'
+        templateId:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/PageMetadata'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PageMetadata:
+      type: object
+      properties:
+        compressedSize:
+          type: integer
+        componentCount:
+          type: integer
+        lastValidation:
+          type: string
+          format: date-time
+        bandwidthValid:
+          type: boolean
+
+    PageComponent:
+      type: object
+      required:
+        - id
+        - type
+        - gridArea
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [text, heading, paragraph, image, form, input, button, link, table, list, container, divider]
+        gridArea:
+          $ref: '#/components/schemas/GridPosition'
+        properties:
+          type: object
+        style:
+          $ref: '#/components/schemas/ComponentStyle'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PageComponent'
+        locked:
+          type: boolean
+
+    GridLayout:
+      type: object
+      required:
+        - columns
+        - rows
+        - gap
+      properties:
+        columns:
+          type: integer
+        rows:
+          type: integer
+        gap:
+          type: integer
+        responsive:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsiveBreakpoint'
+
+    GridPosition:
+      type: object
+      required:
+        - row
+        - col
+        - rowSpan
+        - colSpan
+      properties:
+        row:
+          type: integer
+        col:
+          type: integer
+        rowSpan:
+          type: integer
+        colSpan:
+          type: integer
+
+    ResponsiveBreakpoint:
+      type: object
+      properties:
+        maxWidth:
+          type: integer
+        columns:
+          type: integer
+        stackComponents:
+          type: boolean
+
+    ComponentStyle:
+      type: object
+      properties:
+        basic:
+          type: object
+          properties:
+            textAlign:
+              type: string
+              enum: [left, center, right]
+            fontSize:
+              type: string
+              enum: [small, medium, large]
+            fontWeight:
+              type: string
+              enum: [normal, bold]
+        advanced:
+          type: object
+
+    PageTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - layout
+        - components
+        - author
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [landing, blog, contact, gallery, custom]
+        thumbnail:
+          type: string
+        layout:
+          $ref: '#/components/schemas/GridLayout'
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateComponent'
+        styles:
+          type: object
+        author:
+          type: string
+        isPublic:
+          type: boolean
+        usageCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TemplateComponent:
+      type: object
+      required:
+        - type
+        - gridArea
+      properties:
+        type:
+          type: string
+        gridArea:
+          $ref: '#/components/schemas/GridPosition'
+        defaultProps:
+          type: object
+        style:
+          $ref: '#/components/schemas/ComponentStyle'
+        placeholder:
+          type: string
+
+    ActionBinding:
+      type: object
+      required:
+        - id
+        - componentId
+        - event
+        - action
+      properties:
+        id:
+          type: string
+        componentId:
+          type: string
+        event:
+          type: string
+          enum: [click, submit, change, focus, blur, load]
+        action:
+          $ref: '#/components/schemas/Action'
+        params:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParamMapping'
+        condition:
+          $ref: '#/components/schemas/ActionCondition'
+
+    Action:
+      type: object
+      required:
+        - type
+        - handler
+      properties:
+        type:
+          type: string
+          enum: [server, local, navigation]
+        handler:
+          type: string
+        description:
+          type: string
+
+    ParamMapping:
+      type: object
+      required:
+        - source
+        - sourcePath
+        - targetParam
+      properties:
+        source:
+          type: string
+          enum: [component, form, page, global]
+        sourceId:
+          type: string
+        sourcePath:
+          type: string
+        targetParam:
+          type: string
+        transform:
+          type: string
+
+    ActionCondition:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [simple, expression]
+        field:
+          type: string
+        operator:
+          type: string
+          enum: ['==', '!=', '>', '<', 'contains']
+        value:
+          type: any
+        expression:
+          type: string
+
+    ServerFunction:
+      type: object
+      required:
+        - id
+        - name
+        - endpoint
+        - description
+        - category
+        - params
+        - returns
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        endpoint:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [data, form, navigation, utility, custom]
+        params:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionParam'
+        returns:
+          $ref: '#/components/schemas/ReturnType'
+        requiresAuth:
+          type: boolean
+        rateLimit:
+          type: integer
+
+    FunctionParam:
+      type: object
+      required:
+        - name
+        - type
+        - required
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [string, number, boolean, object, array]
+        required:
+          type: boolean
+        description:
+          type: string
+        defaultValue:
+          type: any
+        validation:
+          $ref: '#/components/schemas/ParamValidation'
+
+    ParamValidation:
+      type: object
+      properties:
+        pattern:
+          type: string
+        min:
+          type: number
+        max:
+          type: number
+        enum:
+          type: array
+          items:
+            type: any
+
+    ReturnType:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        schema:
+          type: object
+
+    EditHistory:
+      type: object
+      required:
+        - id
+        - pageId
+        - sessionId
+        - operations
+      properties:
+        id:
+          type: string
+        pageId:
+          type: string
+        sessionId:
+          type: string
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditOperation'
+        maxSize:
+          type: integer
+        currentIndex:
+          type: integer
+
+    EditOperation:
+      type: object
+      required:
+        - id
+        - type
+        - timestamp
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [add_component, remove_component, move_component, update_props, update_style, apply_template, bulk_operation]
+        timestamp:
+          type: string
+          format: date-time
+        componentId:
+          type: string
+        previousState:
+          type: any
+        newState:
+          type: any
+        compressed:
+          type: boolean
+
+    ValidationResult:
+      type: object
+      required:
+        - valid
+        - size
+        - compressedSize
+      properties:
+        valid:
+          type: boolean
+        size:
+          type: integer
+        compressedSize:
+          type: integer
+        compressionRatio:
+          type: number
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    CreateSiteRequest:
+      type: object
+      required:
+        - callsign
+        - name
+      properties:
+        callsign:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    UpdateSiteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        homePage:
+          type: string
+        globalStyles:
+          type: object
+
+    CreatePageRequest:
+      type: object
+      required:
+        - siteId
+        - slug
+        - title
+      properties:
+        siteId:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        templateId:
+          type: string
+
+    UpdatePageRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        layout:
+          $ref: '#/components/schemas/GridLayout'
+
+    AddComponentRequest:
+      type: object
+      required:
+        - type
+        - gridArea
+      properties:
+        type:
+          type: string
+        gridArea:
+          $ref: '#/components/schemas/GridPosition'
+        properties:
+          type: object
+        style:
+          $ref: '#/components/schemas/ComponentStyle'
+
+    UpdateComponentRequest:
+      type: object
+      properties:
+        properties:
+          type: object
+        style:
+          $ref: '#/components/schemas/ComponentStyle'
+        locked:
+          type: boolean
+
+    MoveComponentRequest:
+      type: object
+      required:
+        - gridArea
+      properties:
+        gridArea:
+          $ref: '#/components/schemas/GridPosition'
+
+    CreateTemplateRequest:
+      type: object
+      required:
+        - pageId
+        - name
+        - category
+      properties:
+        pageId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        isPublic:
+          type: boolean
+
+    ApplyTemplateRequest:
+      type: object
+      required:
+        - templateId
+      properties:
+        templateId:
+          type: string
+        preserveContent:
+          type: boolean
+
+    CreateActionRequest:
+      type: object
+      required:
+        - pageId
+        - componentId
+        - event
+        - action
+      properties:
+        pageId:
+          type: string
+        componentId:
+          type: string
+        event:
+          type: string
+        action:
+          $ref: '#/components/schemas/Action'
+        params:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParamMapping'
+        condition:
+          $ref: '#/components/schemas/ActionCondition'
+
+    UpdateActionRequest:
+      type: object
+      properties:
+        event:
+          type: string
+        action:
+          $ref: '#/components/schemas/Action'
+        params:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParamMapping'
+        condition:
+          $ref: '#/components/schemas/ActionCondition'
+
+    UndoResult:
+      type: object
+      required:
+        - success
+        - operation
+      properties:
+        success:
+          type: boolean
+        operation:
+          $ref: '#/components/schemas/EditOperation'
+        page:
+          $ref: '#/components/schemas/Page'
+
+    RedoResult:
+      type: object
+      required:
+        - success
+        - operation
+      properties:
+        success:
+          type: boolean
+        operation:
+          $ref: '#/components/schemas/EditOperation'
+        page:
+          $ref: '#/components/schemas/Page'

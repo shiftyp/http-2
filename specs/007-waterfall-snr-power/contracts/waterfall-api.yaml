@@ -1,0 +1,285 @@
+openapi: 3.0.0
+info:
+  title: Waterfall Display Internal API
+  version: 1.0.0
+  description: Internal API for waterfall display component communication
+
+paths:
+  /api/waterfall/spectrum:
+    get:
+      summary: Get current spectrum data
+      operationId: getCurrentSpectrum
+      responses:
+        '200':
+          description: Current spectrum sample
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpectrumSample'
+
+  /api/waterfall/history:
+    get:
+      summary: Get spectrum history
+      operationId: getSpectrumHistory
+      parameters:
+        - name: duration
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+          description: History duration in seconds
+        - name: resolution
+          in: query
+          schema:
+            type: string
+            enum: [full, decimated]
+          description: Data resolution
+      responses:
+        '200':
+          description: Array of spectrum samples
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpectrumSample'
+
+  /api/waterfall/config:
+    get:
+      summary: Get current configuration
+      operationId: getConfiguration
+      responses:
+        '200':
+          description: Current waterfall configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterfallConfiguration'
+
+    put:
+      summary: Update configuration
+      operationId: updateConfiguration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaterfallConfiguration'
+      responses:
+        '200':
+          description: Configuration updated
+        '400':
+          description: Invalid configuration
+
+  /api/waterfall/signals:
+    get:
+      summary: Get detected signals
+      operationId: getDetectedSignals
+      parameters:
+        - name: minSNR
+          in: query
+          schema:
+            type: number
+          description: Minimum SNR threshold
+      responses:
+        '200':
+          description: Array of detected signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignalDetection'
+
+  /api/waterfall/export:
+    post:
+      summary: Export waterfall data
+      operationId: exportWaterfall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format:
+                  type: string
+                  enum: [png, csv]
+                timeRange:
+                  type: object
+                  properties:
+                    start:
+                      type: number
+                    end:
+                      type: number
+      responses:
+        '200':
+          description: Export data
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+
+components:
+  schemas:
+    SpectrumSample:
+      type: object
+      required:
+        - timestamp
+        - frequencyBins
+        - sampleRate
+        - centerFrequency
+        - bandwidth
+        - noiseFloor
+      properties:
+        timestamp:
+          type: number
+          description: Unix timestamp in milliseconds
+        frequencyBins:
+          type: array
+          items:
+            type: number
+          minItems: 2048
+          maxItems: 2048
+        sampleRate:
+          type: number
+          enum: [48000, 44100, 96000]
+        centerFrequency:
+          type: number
+          minimum: 1800000
+          maximum: 30000000
+        bandwidth:
+          type: number
+          minimum: 100
+          maximum: 2800
+        noiseFloor:
+          type: number
+          minimum: -120
+          maximum: 0
+
+    WaterfallConfiguration:
+      type: object
+      required:
+        - id
+        - name
+        - colorScheme
+        - updateRate
+        - historyDepth
+        - frequencyRange
+        - dynamicRange
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        colorScheme:
+          $ref: '#/components/schemas/ColorScheme'
+        updateRate:
+          type: number
+          minimum: 10
+          maximum: 60
+        historyDepth:
+          type: number
+          minimum: 30
+          maximum: 300
+        frequencyRange:
+          $ref: '#/components/schemas/FrequencyRange'
+        dynamicRange:
+          $ref: '#/components/schemas/DynamicRange'
+        gridEnabled:
+          type: boolean
+        peakHold:
+          type: boolean
+        averaging:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    SignalDetection:
+      type: object
+      required:
+        - id
+        - timestamp
+        - frequency
+        - bandwidth
+        - power
+        - snr
+        - confidence
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: number
+        frequency:
+          type: number
+        bandwidth:
+          type: number
+        power:
+          type: number
+        snr:
+          type: number
+        modulation:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    ColorScheme:
+      type: object
+      required:
+        - name
+        - colors
+      properties:
+        name:
+          type: string
+        colors:
+          type: array
+          items:
+            type: object
+            properties:
+              position:
+                type: number
+                minimum: 0
+                maximum: 1
+              color:
+                type: string
+        background:
+          type: string
+        grid:
+          type: string
+        text:
+          type: string
+
+    FrequencyRange:
+      type: object
+      required:
+        - min
+        - max
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+        center:
+          type: number
+        span:
+          type: number
+
+    DynamicRange:
+      type: object
+      required:
+        - min
+        - max
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+        reference:
+          type: number

@@ -1,0 +1,133 @@
+openapi: 3.0.0
+info:
+  title: Schema Generation API
+  version: 1.0.0
+  description: Dynamic protobuf schema generation from JavaScript objects
+
+paths:
+  /internal/schema/generate:
+    post:
+      summary: Generate protobuf schema from data structure
+      operationId: generateSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+                - dataType
+              properties:
+                data:
+                  type: object
+                  description: The data structure to analyze
+                dataType:
+                  type: string
+                  description: Hint about data type
+                  enum:
+                    - api-response
+                    - mesh-route
+                    - telemetry
+                    - message
+                options:
+                  type: object
+                  properties:
+                    includeDefaults:
+                      type: boolean
+                      default: true
+                    useProto3:
+                      type: boolean
+                      default: false
+      responses:
+        '200':
+          description: Schema generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaDefinition'
+        '400':
+          description: Invalid data structure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /internal/schema/compile:
+    post:
+      summary: Compile proto definition to runtime schema
+      operationId: compileSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - protoContent
+              properties:
+                protoContent:
+                  type: string
+                  description: Proto file content
+      responses:
+        '200':
+          description: Schema compiled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  schemaId:
+                    type: string
+        '400':
+          description: Invalid proto syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    SchemaDefinition:
+      type: object
+      required:
+        - id
+        - version
+        - protoContent
+        - timestamp
+        - sourceCallsign
+        - dataType
+      properties:
+        id:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: SHA-256 hash of proto content
+        version:
+          type: integer
+          minimum: 1
+        protoContent:
+          type: string
+          description: Generated proto file content
+        timestamp:
+          type: integer
+          description: Unix timestamp in milliseconds
+        sourceCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$'
+        dataType:
+          type: string
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

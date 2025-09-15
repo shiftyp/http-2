@@ -115,7 +115,7 @@ const Dashboard: React.FC = () => {
               <ol className="list-decimal list-inside space-y-2 text-gray-400">
                 <li>Go to Settings and enter your amateur radio callsign</li>
                 <li>Connect your radio using the Radio Operations page</li>
-                <li>Create content using the Content Creator</li>
+                <li>Create content using the Visual Page Builder</li>
                 <li>Browse content from other stations</li>
                 <li>Join the mesh network to relay content</li>
               </ol>

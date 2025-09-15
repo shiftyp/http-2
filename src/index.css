@@ -93,9 +93,6 @@ code {
   border: 1px solid rgba(51, 65, 85, 0.5);
 }
 
-.glow {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-}
 
 /* Radio-specific styles */
 .morse-dot {
