@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: SDR Device Management API
+  description: Browser-based API for managing Software-Defined Radio devices
+  version: 1.0.0
+
+paths:
+  /api/sdr/devices:
+    get:
+      summary: List connected SDR devices
+      description: Returns all currently connected and detected SDR devices
+      responses:
+        '200':
+          description: List of SDR devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SDRDevice'
+
+    post:
+      summary: Connect to new SDR device
+      description: Initiate connection to a new SDR device via WebUSB
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deviceType:
+                  $ref: '#/components/schemas/SDRDeviceType'
+                requestWebUSB:
+                  type: boolean
+                  description: Trigger WebUSB device selection dialog
+              required:
+                - deviceType
+                - requestWebUSB
+      responses:
+        '201':
+          description: Device connected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRDevice'
+        '400':
+          description: Device connection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/sdr/devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Unique SDR device identifier
+
+    get:
+      summary: Get device details
+      description: Returns detailed information about specific SDR device
+      responses:
+        '200':
+          description: Device details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRDevice'
+        '404':
+          description: Device not found
+
+    delete:
+      summary: Disconnect SDR device
+      description: Gracefully disconnect from SDR device
+      responses:
+        '204':
+          description: Device disconnected successfully
+        '404':
+          description: Device not found
+
+  /api/sdr/devices/{deviceId}/configure:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    post:
+      summary: Configure device parameters
+      description: Set frequency, gain, sample rate for SDR device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                centerFrequency:
+                  type: number
+                  minimum: 1000000
+                  maximum: 6000000000
+                  description: Center frequency in Hz
+                sampleRate:
+                  type: number
+                  description: Sample rate in Hz
+                gain:
+                  type: number
+                  description: RF gain setting
+                bandwidth:
+                  type: number
+                  description: Bandwidth in Hz
+              required:
+                - centerFrequency
+                - sampleRate
+      responses:
+        '200':
+          description: Device configured successfully
+        '400':
+          description: Invalid configuration parameters
+        '404':
+          description: Device not found
+
+components:
+  schemas:
+    SDRDevice:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique device identifier
+        type:
+          $ref: '#/components/schemas/SDRDeviceType'
+        vendorId:
+          type: number
+          description: USB vendor ID
+        productId:
+          type: number
+          description: USB product ID
+        serialNumber:
+          type: string
+          description: Device serial number
+        capabilities:
+          $ref: '#/components/schemas/SDRCapabilities'
+        connectionStatus:
+          $ref: '#/components/schemas/ConnectionStatus'
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last successful communication
+      required:
+        - id
+        - type
+        - vendorId
+        - productId
+        - capabilities
+        - connectionStatus
+
+    SDRCapabilities:
+      type: object
+      properties:
+        minFrequency:
+          type: number
+          description: Minimum tunable frequency in Hz
+        maxFrequency:
+          type: number
+          description: Maximum tunable frequency in Hz
+        maxBandwidth:
+          type: number
+          description: Maximum simultaneous bandwidth in Hz
+        sampleRates:
+          type: array
+          items:
+            type: number
+          description: Supported sample rates in Hz
+        gainRange:
+          type: object
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+          required:
+            - min
+            - max
+        hasFullDuplex:
+          type: boolean
+          description: Device supports transmit capability
+        hasDiversityRx:
+          type: boolean
+          description: Device has multiple receive channels
+      required:
+        - minFrequency
+        - maxFrequency
+        - maxBandwidth
+        - sampleRates
+        - gainRange
+        - hasFullDuplex
+        - hasDiversityRx
+
+    SDRDeviceType:
+      type: string
+      enum:
+        - RTL_SDR
+        - HACKRF
+        - LIMESDR
+        - PLUTOSDR
+        - SDRPLAY
+      description: Type of SDR device
+
+    ConnectionStatus:
+      type: string
+      enum:
+        - CONNECTED
+        - DISCONNECTED
+        - ERROR
+      description: Device connection status
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - code
+        - message

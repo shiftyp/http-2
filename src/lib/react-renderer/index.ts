@@ -11,6 +11,258 @@ import { hydrateRoot, createRoot } from 'react-dom/client';
 import { HamRadioCompressor } from '../compression';
 import { protocolBuffers } from '../protocol-buffers';
 
+/**
+ * Pure binary field encoder (no protobuf/JSON overhead)
+ * Encodes components as fixed-position binary fields
+ */
+class BinaryFieldEncoder {
+  private buffer: number[] = [];
+
+  /**
+   * Component type mapping (4 bits = 16 component types max)
+   */
+  private componentTypes = {
+    'text': 0x1, 'heading': 0x2, 'paragraph': 0x3, 'image': 0x4,
+    'form': 0x5, 'button': 0x6, 'input': 0x7, 'list': 0x8,
+    'link': 0x9, 'container': 0xA, 'divider': 0xB, 'table': 0xC,
+    'Unknown': 0xF
+  };
+
+  /**
+   * Text field IDs (4 bits = 16 text fields max)
+   */
+  private textFieldIds = {
+    'text': 0x1, 'src': 0x2, 'href': 0x3, 'alt': 0x4,
+    'value': 0x5, 'placeholder': 0x6, 'title': 0x7, 'label': 0x8
+  };
+
+  writeComponentType(componentType: string): void {
+    const typeId = this.componentTypes[componentType as keyof typeof this.componentTypes] || 0xF;
+    this.buffer.push(typeId);
+  }
+
+  writeBitmask(property: string, value: number): void {
+    // Store bitmask values in single bytes
+    this.buffer.push(value & 0xFF);
+  }
+
+  writeTextField(fieldName: string, text: string | undefined): void {
+    if (!text || !text.trim()) {
+      // Empty field: just write field ID + 0 length
+      const fieldId = this.textFieldIds[fieldName as keyof typeof this.textFieldIds] || 0;
+      this.buffer.push((fieldId << 4) | 0); // Field ID in upper 4 bits, length 0 in lower 4 bits
+      return;
+    }
+
+    // Compress the text using ham radio techniques
+    const compressed = this.compressTextForBinary(text);
+    const compressedBytes = new TextEncoder().encode(compressed);
+
+    const fieldId = this.textFieldIds[fieldName as keyof typeof this.textFieldIds] || 0;
+
+    if (compressedBytes.length < 16) {
+      // Short text: pack field ID + length in 1 byte, then data
+      this.buffer.push((fieldId << 4) | compressedBytes.length);
+      this.buffer.push(...compressedBytes);
+    } else {
+      // Long text: field ID + 15 (marker), then 2-byte length, then data
+      this.buffer.push((fieldId << 4) | 15); // 15 = extended length marker
+      this.buffer.push(compressedBytes.length & 0xFF);
+      this.buffer.push((compressedBytes.length >> 8) & 0xFF);
+      this.buffer.push(...compressedBytes);
+    }
+  }
+
+  private compressTextForBinary(text: string): string {
+    // Apply ham radio text compression
+    if (text.trim() === 'Enter your text here...') {
+      return 'DT'; // 2 bytes instead of 25
+    }
+
+    // Calculate segmentation overhead cost
+    const SEGMENT_OVERHEAD = 3; // "x:" prefix + "|" separator ≈ 3 bytes per segment
+
+    // Try segmented encoding vs single encoding
+    const segments = this.segmentTextByEncoding(text);
+    const originalBytes = new TextEncoder().encode(text).length;
+
+    // Calculate segmented compression
+    let segmentedSize = 0;
+    const encodedSegments: string[] = [];
+
+    for (const segment of segments) {
+      let encoded: string;
+      switch (segment.encoding) {
+        case 'morse':
+          encoded = this.encodeMorseSegment(segment.text);
+          break;
+        case 'ascii':
+          encoded = this.encodeASCIISegment(segment.text);
+          break;
+        case 'utf8':
+          encoded = this.encodeUTF8Segment(segment.text);
+          break;
+        default:
+          encoded = segment.text;
+      }
+
+      const segmentWithOverhead = `${segment.encoding[0]}:${encoded}`;
+      segmentedSize += new TextEncoder().encode(segmentWithOverhead).length + 1; // +1 for separator
+      encodedSegments.push(segmentWithOverhead);
+    }
+
+    // Try single-encoding approaches
+    const singleMorseSize = this.isSimpleText(text) ?
+      new TextEncoder().encode(this.encodeMorseSegment(text)).length + 2 : // +2 for "m:" prefix
+      Number.MAX_SAFE_INTEGER;
+
+    const singleASCIISize = new TextEncoder().encode(`a:${this.encodeASCIISegment(text)}`).length;
+
+    const singleUTF8Size = new TextEncoder().encode(`u:${this.encodeUTF8Segment(text)}`).length;
+
+    // Choose the most efficient encoding
+    const options = [
+      { method: 'segmented', size: segmentedSize, data: encodedSegments.join('|'), segments: segments.length },
+      { method: 'morse', size: singleMorseSize, data: `m:${this.encodeMorseSegment(text)}`, segments: 1 },
+      { method: 'ascii', size: singleASCIISize, data: `a:${this.encodeASCIISegment(text)}`, segments: 1 },
+      { method: 'utf8', size: singleUTF8Size, data: `u:${this.encodeUTF8Segment(text)}`, segments: 1 }
+    ];
+
+    const best = options.reduce((prev, curr) => curr.size < prev.size ? curr : prev);
+
+    console.log(`📻 Adaptive encoding: ${originalBytes} bytes → ${best.size} bytes (${(originalBytes/best.size).toFixed(2)}x)`);
+    console.log(`  Best method: ${best.method} (${best.segments} segments), overhead saved by avoiding ${segments.length - best.segments} extra segments`);
+
+    return best.data;
+  }
+
+  private segmentTextByEncoding(text: string): Array<{text: string, encoding: 'morse' | 'ascii' | 'utf8'}> {
+    const segments: Array<{text: string, encoding: 'morse' | 'ascii' | 'utf8'}> = [];
+    let currentSegment = '';
+    let currentEncoding: 'morse' | 'ascii' | 'utf8' | null = null;
+
+    for (const char of text) {
+      const charEncoding = this.getOptimalCharEncoding(char);
+
+      if (currentEncoding === null || currentEncoding === charEncoding) {
+        currentSegment += char;
+        currentEncoding = charEncoding;
+      } else {
+        // Encoding type changed, finish current segment
+        if (currentSegment) {
+          segments.push({ text: currentSegment, encoding: currentEncoding });
+        }
+        currentSegment = char;
+        currentEncoding = charEncoding;
+      }
+    }
+
+    // Add final segment
+    if (currentSegment && currentEncoding) {
+      segments.push({ text: currentSegment, encoding: currentEncoding });
+    }
+
+    return segments;
+  }
+
+  private getOptimalCharEncoding(char: string): 'morse' | 'ascii' | 'utf8' {
+    // Morse code: letters, numbers, basic punctuation
+    if (/[A-Za-z0-9\s.,?'-]/.test(char)) {
+      return 'morse';
+    }
+
+    // ASCII: printable ASCII characters
+    if (char.charCodeAt(0) >= 32 && char.charCodeAt(0) <= 126) {
+      return 'ascii';
+    }
+
+    // UTF-8: everything else
+    return 'utf8';
+  }
+
+  private encodeMorseSegment(text: string): string {
+    const morseEncoded = this.encodeToMorseBinary(text);
+    return btoa(String.fromCharCode(...morseEncoded));
+  }
+
+  private encodeASCIISegment(text: string): string {
+    // Apply ham radio dictionary compression for ASCII text
+    const hamTerms = {
+      'frequency': 'freq', 'callsign': 'call', 'station': 'stn', 'radio': 'rig',
+      'antenna': 'ant', 'power': 'pwr', 'signal': 'sig', 'transmission': 'tx',
+      'reception': 'rx', 'amateur': 'ham', 'emergency': 'em', 'repeater': 'rptr',
+      'the': 't', 'and': '&', 'you': 'u', 'for': '4', 'with': 'w'
+    };
+
+    let compressed = text;
+    Object.entries(hamTerms).forEach(([term, abbrev]) => {
+      compressed = compressed.replace(new RegExp(`\\b${term}\\b`, 'gi'), abbrev);
+    });
+
+    return compressed.replace(/\s+/g, ' ').trim();
+  }
+
+  private encodeUTF8Segment(text: string): string {
+    // For UTF-8 segments, just compress whitespace
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  private isSimpleText(text: string): boolean {
+    // Check if text is suitable for Morse encoding (alphanumeric + basic punctuation)
+    return /^[A-Za-z0-9\s.,?'-]+$/.test(text);
+  }
+
+  private encodeToMorseBinary(text: string): Uint8Array {
+    // International Morse Code table
+    const morseTable: Record<string, string> = {
+      'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+      'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+      'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+      'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+      'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---',
+      '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+      '8': '---..', '9': '----.', '.': '.-.-.-', ',': '--..--', '?': '..--..',
+      "'": '.----.', '-': '-....-', ' ': '/'
+    };
+
+    // Convert text to Morse code
+    let morseCode = '';
+    for (const char of text.toUpperCase()) {
+      const morse = morseTable[char];
+      if (morse) {
+        morseCode += morse + ' '; // Space between characters
+      }
+    }
+
+    // Pack Morse code into bits: . = 0, - = 1, space = 00, / = 11
+    const bits: number[] = [];
+    for (const char of morseCode) {
+      switch (char) {
+        case '.': bits.push(0); break;
+        case '-': bits.push(1); break;
+        case ' ': bits.push(0, 0); break; // Character separator
+        case '/': bits.push(1, 1); break; // Word separator
+      }
+    }
+
+    // Pack bits into bytes
+    const bytes: number[] = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let byte = 0;
+      for (let j = 0; j < 8 && i + j < bits.length; j++) {
+        byte |= (bits[i + j] << (7 - j));
+      }
+      bytes.push(byte);
+    }
+
+    return new Uint8Array(bytes);
+  }
+
+  getBytes(): Uint8Array {
+    return new Uint8Array(this.buffer);
+  }
+}
+
 export interface HydrationData {
   html: string;
   state?: any;
@@ -72,6 +324,8 @@ export class ReactSSRRenderer {
     element: React.ReactElement,
     options: RenderOptions = {}
   ): Promise<ProtobufComponentData> {
+    console.log('🚀 NEW BINARY ENCODER CALLED!', { element, options });
+
     const {
       includeState = false,
       componentType
@@ -94,28 +348,28 @@ export class ReactSSRRenderer {
       ...(componentData.state && { __state: componentData.state })
     };
 
-    // Calculate original size for metrics (what JSON would be)
-    const originalJSON = JSON.stringify(dataToEncode);
-    const originalSize = new TextEncoder().encode(originalJSON).length;
+    // Debug what data we're receiving
+    console.log('Raw component data:', dataToEncode);
 
-    // Generate schema for this component type
-    const schemaName = `${resolvedComponentType}Props`;
-    const schema = protocolBuffers.generateSchema(dataToEncode, schemaName);
+    // Apply bitmask optimization for known properties
+    const optimizedData = this.applyBitmaskOptimization(dataToEncode);
+    console.log('Optimized data:', optimizedData);
 
-    // Encode the data using protobuf
-    const encoded = protocolBuffers.encode(dataToEncode, schema.id);
-    const protobufSize = encoded.data.length;
-    const ratio = originalSize / protobufSize;
+    // Calculate original size for metrics
+    const originalSize = new TextEncoder().encode(JSON.stringify(dataToEncode)).length;
 
-    console.log(`Protobuf encoding for ${resolvedComponentType}: JSON ${originalSize} bytes -> Protobuf ${protobufSize} bytes (${ratio.toFixed(2)}x compression)`);
+    // Encode entire component as single binary field (bypass protobuf)
+    const binaryData = this.encodeComponentBinary(optimizedData, resolvedComponentType);
+
+    console.log(`Binary encoding for ${resolvedComponentType}: JSON ${originalSize} bytes -> Binary ${binaryData.length} bytes (${(originalSize / binaryData.length).toFixed(2)}x compression)`);
 
     return {
       componentType: resolvedComponentType,
-      protobufData: encoded.data,
-      componentSchema: schema.id,
+      protobufData: binaryData,
+      componentSchema: 'binary-component',
       originalSize,
-      compressedSize: protobufSize,
-      ratio
+      compressedSize: binaryData.length,
+      ratio: originalSize / binaryData.length
     };
   }
 
@@ -161,6 +415,93 @@ export class ReactSSRRenderer {
 
     return serializableProps;
   }
+
+  /**
+   * Apply bitmask optimization for known property values
+   */
+  private applyBitmaskOptimization(data: any): any {
+    const propertyBitmasks = {
+      align: { 'left': 0x01, 'center': 0x02, 'right': 0x03, 'justify': 0x04 },
+      size: { 'small': 0x01, 'medium': 0x02, 'large': 0x03, 'xl': 0x04 },
+      variant: { 'primary': 0x01, 'secondary': 0x02, 'success': 0x03, 'warning': 0x04, 'danger': 0x05 }
+    };
+
+    const componentTypeBits = {
+      'text': 0x01, 'heading': 0x02, 'paragraph': 0x03, 'image': 0x04,
+      'form': 0x05, 'button': 0x06, 'input': 0x07, 'list': 0x08,
+      'link': 0x09, 'container': 0x0A, 'divider': 0x0B
+    };
+
+    const optimized = { ...data };
+
+    // Convert known properties to bitmasks
+    Object.entries(propertyBitmasks).forEach(([prop, bitmask]) => {
+      if (optimized[prop] && bitmask[optimized[prop] as keyof typeof bitmask]) {
+        optimized[`${prop}_bit`] = bitmask[optimized[prop] as keyof typeof bitmask];
+        delete optimized[prop]; // Remove original string value
+      }
+    });
+
+    // Only keep essential content properties, remove all theming/styling
+    const essentialProps = ['text', 'src', 'href', 'alt', 'value', 'placeholder', 'align', 'size', 'variant'];
+    const filtered: any = {};
+
+    essentialProps.forEach(prop => {
+      if (optimized[prop] && typeof optimized[prop] === 'string' && optimized[prop].trim()) {
+        filtered[prop] = optimized[prop];
+      }
+    });
+
+    // Keep bitmask properties
+    Object.keys(optimized).forEach(key => {
+      if (key.endsWith('_bit')) {
+        filtered[key] = optimized[key];
+      }
+    });
+
+    return filtered;
+  }
+
+  /**
+   * Encode component as pure binary data (no protobuf/JSON)
+   * Uses field-based binary encoding with known field positions
+   */
+  private encodeComponentBinary(data: any, componentType: string): Uint8Array {
+    console.log('🔧 Raw binary encoding for:', componentType, data);
+
+    // Create binary field encoder
+    const encoder = new BinaryFieldEncoder();
+
+    // Encode component type (1 byte)
+    encoder.writeComponentType(componentType);
+
+    // Encode known fields in fixed positions
+    encoder.writeTextField('text', data.text);
+    encoder.writeTextField('src', data.src);
+    encoder.writeTextField('href', data.href);
+    encoder.writeTextField('alt', data.alt);
+    encoder.writeTextField('value', data.value);
+    encoder.writeTextField('placeholder', data.placeholder);
+
+    // Encode bitmask properties (1 byte each)
+    encoder.writeBitmask('align', data.align_bit || 0);
+    encoder.writeBitmask('size', data.size_bit || 0);
+    encoder.writeBitmask('variant', data.variant_bit || 0);
+
+    const result = encoder.getBytes();
+
+    console.log(`📦 Raw binary encoding:`, {
+      componentType,
+      data,
+      jsonSize: JSON.stringify(data).length,
+      binarySize: result.length,
+      ratio: (JSON.stringify(data).length / result.length).toFixed(2) + 'x',
+      binaryHex: Array.from(result).map(b => b.toString(16).padStart(2, '0')).join(' ')
+    });
+
+    return result;
+  }
+
 
   /**
    * Check if a value can be serialized to JSON

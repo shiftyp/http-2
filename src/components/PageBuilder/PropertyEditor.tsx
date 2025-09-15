@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardContent } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -25,14 +25,35 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onSelectChild
 }) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'advanced' | 'position' | 'children'>('basic');
+  const [localProperties, setLocalProperties] = useState(component.properties);
+
+  // Sync local state when component changes
+  useEffect(() => {
+    setLocalProperties(component.properties);
+  }, [component.id]); // Only sync when component ID changes, not on every property change
+
+  // Debounced update function
+  const debouncedUpdate = useCallback(() => {
+    const timeoutId = setTimeout(() => {
+      onUpdate({
+        properties: localProperties
+      });
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [localProperties, onUpdate]);
+
+  // Trigger debounced update when local properties change
+  useEffect(() => {
+    const cleanup = debouncedUpdate();
+    return cleanup;
+  }, [localProperties]);
 
   const updateProperties = (key: string, value: any) => {
-    onUpdate({
-      properties: {
-        ...component.properties,
-        [key]: value
-      }
-    });
+    setLocalProperties(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   const updateStyle = (category: 'basic' | 'advanced', key: string, value: any) => {
@@ -98,8 +119,170 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
         return { placeholder: 'Enter text...', type: 'text' };
       case ComponentType.IMAGE:
         return { alt: 'Image', src: '/placeholder.jpg' };
+      case ComponentType.MARKDOWN:
+        return {
+          content: '# Sample Heading\n\nThis is a **paragraph** with some text.\n\n- List item 1\n- List item 2\n\n[Link text](https://example.com)\n\n| Column 1 | Column 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |'
+        };
       default:
         return {};
+    }
+  };
+
+  // Markdown conversion function
+  const convertMarkdownToComponents = () => {
+    const markdownContent = localProperties.content || '';
+    const lines = markdownContent.split('\n');
+    const newComponents: PageComponent[] = [];
+    let currentRow = component.gridArea.row;
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+
+      if (!line) {
+        i++;
+        continue;
+      }
+
+      // Headings (# ## ###)
+      if (line.startsWith('#')) {
+        const level = line.match(/^#+/)?.[0].length || 1;
+        const content = line.replace(/^#+\s*/, '');
+
+        newComponents.push({
+          id: `md-heading-${Date.now()}-${i}`,
+          type: ComponentType.HEADING,
+          gridArea: {
+            row: currentRow++,
+            col: component.gridArea.col,
+            rowSpan: 1,
+            colSpan: component.gridArea.colSpan
+          },
+          properties: { content },
+          style: {
+            basic: {
+              fontSize: level === 1 ? 'large' : level === 2 ? 'medium' : 'small',
+              fontWeight: 'bold',
+              textAlign: 'left'
+            }
+          }
+        });
+      }
+      // Tables
+      else if (line.includes('|')) {
+        const tableRows: string[] = [];
+        let j = i;
+
+        // Collect all table rows
+        while (j < lines.length && lines[j].trim().includes('|')) {
+          const tableLine = lines[j].trim();
+          if (!tableLine.match(/^\|[\s\-\|]+\|$/)) { // Skip separator rows
+            tableRows.push(tableLine);
+          }
+          j++;
+        }
+
+        if (tableRows.length > 0) {
+          // Create table content
+          const tableContent = tableRows.map(row =>
+            row.split('|').map(cell => cell.trim()).filter(cell => cell).join(' | ')
+          ).join('\n');
+
+          newComponents.push({
+            id: `md-table-${Date.now()}-${i}`,
+            type: ComponentType.TABLE,
+            gridArea: {
+              row: currentRow++,
+              col: component.gridArea.col,
+              rowSpan: 1,
+              colSpan: component.gridArea.colSpan
+            },
+            properties: { content: tableContent },
+            style: { basic: { fontSize: 'medium', fontWeight: 'normal', textAlign: 'left' } }
+          });
+        }
+
+        i = j;
+        continue;
+      }
+      // Lists (- or * bullets)
+      else if (line.startsWith('-') || line.startsWith('*')) {
+        const listItems: string[] = [];
+        let j = i;
+
+        // Collect all list items
+        while (j < lines.length && (lines[j].trim().startsWith('-') || lines[j].trim().startsWith('*'))) {
+          listItems.push(lines[j].trim().replace(/^[\-\*]\s*/, ''));
+          j++;
+        }
+
+        if (listItems.length > 0) {
+          newComponents.push({
+            id: `md-list-${Date.now()}-${i}`,
+            type: ComponentType.LIST,
+            gridArea: {
+              row: currentRow++,
+              col: component.gridArea.col,
+              rowSpan: 1,
+              colSpan: component.gridArea.colSpan
+            },
+            properties: { content: listItems.join('\n') },
+            style: { basic: { fontSize: 'medium', fontWeight: 'normal', textAlign: 'left' } }
+          });
+        }
+
+        i = j;
+        continue;
+      }
+      // Links [text](url)
+      else if (line.includes('[') && line.includes('](')) {
+        const linkMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        if (linkMatch) {
+          const [, linkText, url] = linkMatch;
+
+          newComponents.push({
+            id: `md-link-${Date.now()}-${i}`,
+            type: ComponentType.LINK,
+            gridArea: {
+              row: currentRow++,
+              col: component.gridArea.col,
+              rowSpan: 1,
+              colSpan: component.gridArea.colSpan
+            },
+            properties: { content: linkText, href: url },
+            style: { basic: { fontSize: 'medium', fontWeight: 'normal', textAlign: 'left' } }
+          });
+        }
+      }
+      // Regular paragraphs
+      else {
+        // Process bold and italic formatting
+        let content = line;
+        content = content.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold markers
+        content = content.replace(/\*(.*?)\*/g, '$1'); // Remove italic markers
+
+        newComponents.push({
+          id: `md-paragraph-${Date.now()}-${i}`,
+          type: ComponentType.PARAGRAPH,
+          gridArea: {
+            row: currentRow++,
+            col: component.gridArea.col,
+            rowSpan: 1,
+            colSpan: component.gridArea.colSpan
+          },
+          properties: { content },
+          style: { basic: { fontSize: 'medium', fontWeight: 'normal', textAlign: 'left' } }
+        });
+      }
+
+      i++;
+    }
+
+    // Replace the markdown component with the converted components
+    if (newComponents.length > 0) {
+      onUpdate({
+        children: newComponents
+      });
     }
   };
 
@@ -117,10 +300,34 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
           <div>
             <label className="block text-sm font-medium mb-1">Content</label>
             <Input
-              value={properties.content || ''}
+              value={localProperties.content || ''}
               onChange={(e) => updateProperties('content', e.target.value)}
               placeholder="Enter content..."
             />
+          </div>
+        )}
+
+        {type === ComponentType.MARKDOWN && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Markdown Content</label>
+            <textarea
+              value={localProperties.content || ''}
+              onChange={(e) => updateProperties('content', e.target.value)}
+              placeholder="Enter markdown content..."
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm text-white"
+              rows={8}
+            />
+            <div className="mt-2 space-x-2">
+              <Button
+                onClick={convertMarkdownToComponents}
+                className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Convert to Components
+              </Button>
+              <span className="text-xs text-gray-400">
+                Converts markdown to headings, paragraphs, tables, lists, and links
+              </span>
+            </div>
           </div>
         )}
 
@@ -128,7 +335,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
           <div>
             <label className="block text-sm font-medium mb-1">URL</label>
             <Input
-              value={properties.href || ''}
+              value={localProperties.href || ''}
               onChange={(e) => updateProperties('href', e.target.value)}
               placeholder="https://..."
             />
@@ -140,7 +347,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div>
               <label className="block text-sm font-medium mb-1">Image URL</label>
               <Input
-                value={properties.src || ''}
+                value={localProperties.src || ''}
                 onChange={(e) => updateProperties('src', e.target.value)}
                 placeholder="Image URL..."
               />
@@ -148,7 +355,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div>
               <label className="block text-sm font-medium mb-1">Alt Text</label>
               <Input
-                value={properties.alt || ''}
+                value={localProperties.alt || ''}
                 onChange={(e) => updateProperties('alt', e.target.value)}
                 placeholder="Alternative text..."
               />
@@ -161,7 +368,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div>
               <label className="block text-sm font-medium mb-1">Type</label>
               <select
-                value={properties.type || 'text'}
+                value={localProperties.type || 'text'}
                 onChange={(e) => updateProperties('type', e.target.value)}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white"
               >
@@ -176,7 +383,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div>
               <label className="block text-sm font-medium mb-1">Placeholder</label>
               <Input
-                value={properties.placeholder || ''}
+                value={localProperties.placeholder || ''}
                 onChange={(e) => updateProperties('placeholder', e.target.value)}
                 placeholder="Placeholder text..."
               />
@@ -184,14 +391,14 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div>
               <label className="block text-sm font-medium mb-1">Name</label>
               <Input
-                value={properties.name || ''}
+                value={localProperties.name || ''}
                 onChange={(e) => updateProperties('name', e.target.value)}
                 placeholder="Field name..."
               />
             </div>
             <div className="flex items-center space-x-2">
               <Toggle
-                checked={properties.required || false}
+                checked={localProperties.required || false}
                 onChange={(checked) => updateProperties('required', checked)}
               />
               <label className="text-sm">Required</label>

@@ -26,8 +26,16 @@
       "@/*": ["src/*"],
       "@components/*": ["src/components/*"],
       "@lib/*": ["src/lib/*"],
+      "@lib/torrent-protocol/*": ["src/lib/torrent-protocol/*"],
+      "@lib/mesh-dl-protocol/*": ["src/lib/mesh-dl-protocol/*"],
+      "@lib/content-cache/*": ["src/lib/content-cache/*"],
+      "@lib/chunk-transfer/*": ["src/lib/chunk-transfer/*"],
+      "@lib/spectrum-monitor/*": ["src/lib/spectrum-monitor/*"],
+      "@lib/webrtc-swarm/*": ["src/lib/webrtc-swarm/*"],
+      "@lib/band-manager/*": ["src/lib/band-manager/*"],
       "@pages/*": ["src/pages/*"],
-      "@types/*": ["src/types/*"]
+      "@types/*": ["src/types/*"],
+      "@workers/*": ["src/workers/*"]
     }
   },
   "include": ["src"],

@@ -7,7 +7,6 @@ import DatabaseManager from './pages/DatabaseManager';
 import RadioOps from './pages/RadioOps';
 import Browse from './pages/Browse';
 import Settings from './pages/Settings';
-import ProtobufTest from './pages/ProtobufTest';
 import InstallPrompt from './components/InstallPrompt/InstallPrompt';
 import { db } from './lib/database';
 import './App.css';
@@ -143,14 +142,6 @@ function App() {
               </li>
               <li>
                 <NavLink
-                  to="/protobuf-test"
-                  className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
-                >
-                  🧪 Protobuf Test
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
                   to="/settings"
                   className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
                 >
@@ -169,7 +160,6 @@ function App() {
             <Route path="/database" element={<DatabaseManager />} />
             <Route path="/radio" element={<RadioOps />} />
             <Route path="/browse" element={<Browse />} />
-            <Route path="/protobuf-test" element={<ProtobufTest />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

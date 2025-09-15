@@ -18,9 +18,6 @@ const DraggableComponent: React.FC<DraggableComponentProps> = ({ type, label, ic
     }
   });
 
-  useEffect(() => {
-    console.log('🔧 ComponentPalette Item:', type, { hasListeners: !!listeners, isDragging });
-  }, [type, listeners, isDragging]);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -76,7 +73,8 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ onKeyboardIn
     { type: ComponentType.TABLE, label: 'Table', icon: '📊' },
     { type: ComponentType.LIST, label: 'List', icon: '📝' },
     { type: ComponentType.CONTAINER, label: 'Container', icon: '📦' },
-    { type: ComponentType.DIVIDER, label: 'Divider', icon: '➖' }
+    { type: ComponentType.DIVIDER, label: 'Divider', icon: '➖' },
+    { type: ComponentType.MARKDOWN, label: 'Markdown', icon: '📑' }
   ];
 
   return (

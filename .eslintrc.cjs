@@ -4,7 +4,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: ['./backend/tsconfig.json', './frontend/tsconfig.json'],
+    project: './tsconfig.json',
   },
   plugins: ['@typescript-eslint'],
   extends: [
@@ -33,7 +33,8 @@ module.exports = {
       },
     },
     {
-      files: ['frontend/**/*.tsx', 'frontend/**/*.ts'],
+      files: ['src/**/*.tsx', 'src/**/*.ts'],
+      excludeFiles: ['src/workers/*.ts', 'src/lib/**/*.test.ts'],
       extends: [
         'plugin:react/recommended',
         'plugin:react-hooks/recommended',
@@ -45,6 +46,24 @@ module.exports = {
       },
       rules: {
         'react/react-in-jsx-scope': 'off', // Not needed with React 17+
+      },
+    },
+    {
+      files: ['src/workers/*.ts'],
+      env: {
+        worker: true,
+        browser: true,
+      },
+      rules: {
+        'no-console': 'off', // Workers may need console logging
+      },
+    },
+    {
+      files: ['src/lib/torrent-protocol/**/*.ts', 'src/lib/mesh-dl-protocol/**/*.ts', 'src/lib/content-cache/**/*.ts', 'src/lib/chunk-transfer/**/*.ts', 'src/lib/spectrum-monitor/**/*.ts', 'src/lib/webrtc-swarm/**/*.ts', 'src/lib/band-manager/**/*.ts'],
+      rules: {
+        '@typescript-eslint/explicit-function-return-type': 'error',
+        '@typescript-eslint/no-floating-promises': 'error',
+        'prefer-readonly': 'error',
       },
     },
   ],

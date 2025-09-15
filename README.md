@@ -8,15 +8,17 @@ HTTP Over Ham Radio transforms amateur radio into a digital communication networ
 
 ### Key Features
 
+- **⚡ Hybrid Transmission Modes**: Seamless switching between WebRTC (1MB/s) and RF (14.4kbps) with automatic fallback
+- **🌐 BitTorrent Over Radio**: Chunked content distribution with CQ beacon routing and spectrum monitoring
+- **📡 WebRTC P2P Network**: Direct peer connections via native WebSocket signaling server
 - **🎨 Visual Page Builder**: Drag-and-drop interface for creating web content optimized for radio transmission
-- **📡 Adaptive QPSK Modem**: 750-14400 bps data rates with SNR-based adaptation and neural network optimization
+- **📊 Adaptive QPSK Modem**: 750-14400 bps data rates with SNR-based adaptation and neural network optimization
 - **🗜️ Extreme Compression**: 10-20x reduction using JSX-to-template compilation and browser-compatible algorithms
-- **🌐 Mesh Networking**: AODV routing protocol for multi-hop communication with visualization
+- **🕸️ Mesh Networking**: AODV routing protocol for multi-hop communication with visualization
 - **🔒 Cryptographic Security**: ECDSA signatures and ECDH encryption using Web Crypto API
 - **📖 Digital Logbook**: Full QSO logging with ADIF export and IndexedDB storage
 - **💾 Offline-First**: Complete PWA with Service Worker caching and local data persistence
 - **🎛️ Radio Control**: CAT control via Web Serial API for Icom, Yaesu, and Kenwood radios
-- **🔄 WebRTC Transfer**: Peer-to-peer data transfer for local network station migration
 
 ## 🚦 Quick Start
 

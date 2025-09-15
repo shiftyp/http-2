@@ -6,9 +6,12 @@ Progressive Web Application enabling HTTP communication over amateur radio netwo
 ## Architecture
 - **Progressive Web App**: React-based PWA with offline capabilities and visual page builder
 - **Radio Interface**: CAT control via Web Serial API, audio via Web Audio API
+- **SDR Integration**: WebUSB-based Software-Defined Radio support for wide-band monitoring
 - **Protocol**: HTTP/1.1 over adaptive QPSK modulation (2.8kHz bandwidth)
 - **Mesh**: AODV-based store-and-forward routing with visualization
-- **Data Transfer**: WebRTC peer-to-peer for local network station migration
+- **Transmission Modes**: Hybrid WebRTC/RF switching with automatic fallback
+- **Content Distribution**: BitTorrent-style chunking for RF, direct downloads for WebRTC
+- **Signaling**: Native WebSocket server for internet peer discovery
 - **Visual Builder**: Drag-and-drop component-based page creation system
 
 ## Key Technologies
@@ -16,6 +19,8 @@ Progressive Web Application enabling HTTP communication over amateur radio netwo
 - **React 18** for PWA UI with visual page builder
 - **IndexedDB** for client-side data persistence via logbook API
 - **Web Audio API** for QPSK modulation/demodulation with neural networks
+- **WebUSB API** for direct SDR device control (RTL-SDR, HackRF, LimeSDR, PlutoSDR, SDRplay)
+- **WebAssembly** for real-time FFT processing and signal analysis
 - **Web Serial API** for CAT radio control (Icom, Yaesu, Kenwood)
 - **WebRTC** for peer-to-peer local network transfers
 - **Web Crypto API** for ECDSA signing and ECDH encryption
@@ -26,9 +31,13 @@ Progressive Web Application enabling HTTP communication over amateur radio netwo
 ## Domain Context
 - **Callsigns**: Amateur radio identifiers (e.g., KA1ABC)
 - **CAT Control**: Computer Aided Transceiver control protocol
+- **SDR**: Software-Defined Radio for wide-band spectrum monitoring
 - **QPSK**: Quadrature Phase Shift Keying modulation (750-14400 bps)
 - **FCC Part 97**: US amateur radio regulations (no content encryption)
 - **HF Bands**: High Frequency (3-30 MHz) with variable propagation
+- **WebRTC Mode**: High-speed peer-to-peer (1MB/s local, internet via signaling)
+- **RF Mode**: BitTorrent chunks over radio (14.4kbps max, CQ beacon routing)
+- **Hybrid Mode**: Automatic switching between WebRTC and RF protocols
 - **Visual Builder**: Component-based page creation without text editing
 
 ## HTTP Over Radio Specifics
@@ -68,6 +77,9 @@ src/
 │   ├── mesh-networking/     # AODV routing ✅
 │   ├── qpsk-modem/          # Adaptive QPSK with neural networks ✅
 │   ├── radio-control/       # CAT control ✅
+│   ├── webrtc-transport/    # WebRTC peer connection management ✅
+│   ├── transmission-mode/   # RF/WebRTC mode switching ✅
+│   ├── mesh-dl-protocol/    # BitTorrent-style content distribution ✅
 │   ├── webrtc-transfer/     # P2P data transfer ✅
 │   ├── qr-shortcode/        # Connection codes ✅
 │   ├── station-data/        # Data export/import ✅
@@ -79,12 +91,18 @@ src/
 │   │   ├── ComponentPalette.tsx # Component library
 │   │   ├── PropertyEditor.tsx   # Modal property editor
 │   │   └── PreviewPanel.tsx     # Live preview
+│   ├── TransmissionModeToggle.tsx # Mode switching UI ✅
 │   └── ui/                  # Base UI components ✅
 ├── pages/                   # Application pages
 │   ├── PageBuilder.tsx      # Main visual builder ✅
 │   ├── ContentCreator.tsx   # Content management router ✅
 │   └── Dashboard.tsx        # System overview ✅
 └── workers/                 # Service workers
+
+signaling-server/            # Native WebSocket signaling server ✅
+├── server.js               # Main WebSocket server (native ws)
+├── package.json            # Minimal dependencies (ws only)
+└── README.md               # Deployment guide
 
 tests/ (312 total tests, 219 passing)
 ├── contract/                # API contract tests
@@ -101,11 +119,11 @@ tests/ (312 total tests, 219 passing)
 - **Current Status**: 312 tests, 219 passing (70.2%)
 
 ## Recent Changes
-- **Visual Page Builder**: Complete drag-and-drop interface with component palette
-- **Database Cleanup**: Removed all mock data, using real IndexedDB via logbook API
-- **Browser Compatibility**: Replaced Node.js zlib with browser-compatible compression
-- **Text Shadow Removal**: Eliminated all glow effects for clean rendering
-- **Architecture Focus**: Pure component-based visual building (no text/markdown editing)
+- **Transmission Mode System**: Implemented hybrid WebRTC/RF switching with automatic fallback
+- **BitTorrent Protocol**: Added chunked content distribution for RF mode with CQ beacon routing
+- **WebRTC Transport**: Direct peer-to-peer downloads with native WebSocket signaling server
+- **Mode-Adaptive Architecture**: Seamless switching between 1MB/s WebRTC and 14.4kbps RF protocols
+- **Integration Testing**: Contract and integration tests for transmission mode switching
 
 ## Component System Architecture
 - **ComponentType enum**: Defines all available component types
@@ -143,8 +161,10 @@ npm run typecheck        # Run TypeScript checks
 - **mesh-networking**: AODV routing protocol with multipath support and visualization
 - **compression**: Browser-compatible LZ77-style compression replacing Node.js zlib
 
-### Data & Crypto Libraries
-- **webrtc-transfer**: WebRTC peer-to-peer data transfer for local network
+### Data & Transport Libraries
+- **webrtc-transport**: WebRTC swarm coordination with signaling server integration
+- **transmission-mode**: Hybrid mode switching manager with automatic fallback
+- **mesh-dl-protocol**: BitTorrent-style content distribution with CQ beacon routing
 - **qr-shortcode**: QR code and shortcode generation for connection establishment
 - **station-data**: Station data export/import with ADIF support
 - **crypto**: ECDSA signing and ECDH key exchange using Web Crypto API
@@ -175,13 +195,28 @@ npm run typecheck        # Run TypeScript checks
 - **Modal configuration**: Component properties via dedicated editors
 - **Accessibility**: Full keyboard navigation and screen reader support
 
+## Transmission Mode Commands
+```bash
+# Start signaling server for WebRTC mode
+cd signaling-server && npm start
+
+# Run WebRTC integration tests
+npm test src/test/integration/hybrid-mode-switching.test.ts
+
+# Run transmission mode contract tests
+npm test src/test/contract/transmission-mode-integration.contract.test.ts
+
+# Check signaling server health
+curl http://localhost:8080/health
+```
+
 ## Next Steps
-- Enhance neural network adaptive demodulation
-- Improve mesh network visualization
-- Add more component types to visual builder
-- Implement WebRTC station migration features
-- Deploy as installable PWA with offline functionality
+- Add UI for transmission mode selection and peer management
+- Implement spectrum monitoring for automatic content caching
+- Enhance CQ beacon protocol with content routing intelligence
+- Add WebRTC NAT traversal with TURN server support
+- Deploy signaling server with Docker containerization
 
 ---
-*Context for AI assistance - Version 3.0 - Updated 2025-09-15*
-*Focus: Pure visual component-based building system*
+*Context for AI assistance - Version 4.0 - Updated 2025-09-15*
+*Focus: Hybrid transmission modes with BitTorrent and WebRTC protocols*

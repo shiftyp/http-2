@@ -1,0 +1,454 @@
+openapi: 3.0.3
+info:
+  title: WebSocket Signaling Protocol
+  description: Native WebSocket signaling protocol for WebRTC peer discovery and connection establishment
+  version: 1.0.0
+
+# WebSocket Message Schemas for Native WebSocket Signaling Server
+components:
+  schemas:
+    # Base message structure
+    SignalingMessage:
+      type: object
+      required:
+        - type
+        - messageId
+        - timestamp
+        - fromCallsign
+      properties:
+        type:
+          type: string
+          enum: [register, offer, answer, candidate, peer-list, station-online, station-offline, ping, pong, error]
+        messageId:
+          type: string
+          format: uuid
+          description: Unique message identifier for deduplication
+        timestamp:
+          type: string
+          format: date-time
+          description: When message was created
+        fromCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Sending station callsign
+        sequenceNumber:
+          type: integer
+          minimum: 0
+          description: Incrementing sequence number for ordering
+        ttl:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+          description: Time-to-live for mesh forwarding
+
+    # Station registration
+    RegisterMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - certificateFingerprint
+            - capabilities
+            - protocolVersion
+          properties:
+            type:
+              type: string
+              enum: [register]
+            certificateFingerprint:
+              type: string
+              description: Station certificate fingerprint for verification
+            capabilities:
+              type: array
+              items:
+                type: string
+              description: Station capabilities (WebRTC, PageBuilder, etc.)
+            protocolVersion:
+              type: string
+              description: HTTP-over-radio protocol version
+            geolocation:
+              type: string
+              nullable: true
+              description: General geographic location (grid square)
+
+    # WebRTC offer
+    OfferMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - targetCallsign
+            - offer
+          properties:
+            type:
+              type: string
+              enum: [offer]
+            targetCallsign:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+              description: Target station callsign
+            offer:
+              type: object
+              description: WebRTC SDP offer
+              required:
+                - type
+                - sdp
+              properties:
+                type:
+                  type: string
+                  enum: [offer]
+                sdp:
+                  type: string
+                  description: Session Description Protocol offer
+            dataChannels:
+              type: array
+              items:
+                type: string
+              description: Requested data channel names
+            priority:
+              type: string
+              enum: [low, normal, high, emergency]
+              default: normal
+
+    # WebRTC answer
+    AnswerMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - targetCallsign
+            - answer
+          properties:
+            type:
+              type: string
+              enum: [answer]
+            targetCallsign:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+              description: Target station callsign
+            answer:
+              type: object
+              description: WebRTC SDP answer
+              required:
+                - type
+                - sdp
+              properties:
+                type:
+                  type: string
+                  enum: [answer]
+                sdp:
+                  type: string
+                  description: Session Description Protocol answer
+
+    # ICE candidate
+    CandidateMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - targetCallsign
+            - candidate
+          properties:
+            type:
+              type: string
+              enum: [candidate]
+            targetCallsign:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+              description: Target station callsign
+            candidate:
+              type: object
+              description: ICE candidate information
+              required:
+                - candidate
+                - sdpMLineIndex
+                - sdpMid
+              properties:
+                candidate:
+                  type: string
+                  description: ICE candidate string
+                sdpMLineIndex:
+                  type: integer
+                  description: SDP media line index
+                sdpMid:
+                  type: string
+                  description: SDP media ID
+
+    # Peer list update
+    PeerListMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - peers
+          properties:
+            type:
+              type: string
+              enum: [peer-list]
+            peers:
+              type: array
+              items:
+                $ref: '#/components/schemas/SignalingPeer'
+              description: Available peers on signaling server
+
+    SignalingPeer:
+      type: object
+      required:
+        - callsign
+        - peerId
+        - capabilities
+        - lastSeen
+        - protocolVersion
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Station callsign
+        peerId:
+          type: string
+          format: uuid
+          description: Unique peer identifier
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Station capabilities
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        protocolVersion:
+          type: string
+          description: Protocol version
+        geolocation:
+          type: string
+          nullable: true
+          description: Geographic location
+        connectionLatency:
+          type: number
+          minimum: 0
+          description: Estimated latency in milliseconds
+
+    # Station status updates
+    StationOnlineMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - stationCallsign
+            - capabilities
+          properties:
+            type:
+              type: string
+              enum: [station-online]
+            stationCallsign:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+              description: Station that came online
+            capabilities:
+              type: array
+              items:
+                type: string
+              description: Station capabilities
+            geolocation:
+              type: string
+              nullable: true
+              description: Geographic location
+
+    StationOfflineMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - stationCallsign
+          properties:
+            type:
+              type: string
+              enum: [station-offline]
+            stationCallsign:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+              description: Station that went offline
+            reason:
+              type: string
+              enum: [disconnect, timeout, error]
+              description: Reason for going offline
+
+    # Connection health
+    PingMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ping]
+
+    PongMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [pong]
+
+    # Error handling
+    ErrorMessage:
+      allOf:
+        - $ref: '#/components/schemas/SignalingMessage'
+        - type: object
+          required:
+            - errorCode
+            - errorMessage
+          properties:
+            type:
+              type: string
+              enum: [error]
+            errorCode:
+              type: string
+              enum: [invalid_message, unauthorized, peer_not_found, connection_failed, server_error]
+            errorMessage:
+              type: string
+              description: Human-readable error description
+            originalMessageId:
+              type: string
+              format: uuid
+              nullable: true
+              description: ID of message that caused error
+
+    # Mesh forwarding for noise reduction
+    MeshForwardingHeader:
+      type: object
+      required:
+        - originCallsign
+        - hopCount
+        - seenBy
+      properties:
+        originCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Original message sender
+        hopCount:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: Number of hops from origin
+        seenBy:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+          maxItems: 20
+          description: Callsigns that have seen this message (loop prevention)
+        targetGridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}[a-x]{2}$'
+          nullable: true
+          description: Target geographic grid square for routing
+        forwardingProbability:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Probability this message should be forwarded (gossip protocol)
+
+  # Message flow examples
+  examples:
+    RegisterExample:
+      value:
+        type: "register"
+        messageId: "550e8400-e29b-41d4-a716-446655440000"
+        timestamp: "2025-09-15T10:30:00Z"
+        fromCallsign: "KA1ABC"
+        sequenceNumber: 1
+        ttl: 5
+        certificateFingerprint: "sha256:abcd1234..."
+        capabilities: ["WebRTC", "PageBuilder", "Compression"]
+        protocolVersion: "1.0"
+        geolocation: "FN42aa"
+
+    OfferExample:
+      value:
+        type: "offer"
+        messageId: "660e8400-e29b-41d4-a716-446655440001"
+        timestamp: "2025-09-15T10:31:00Z"
+        fromCallsign: "KA1ABC"
+        sequenceNumber: 2
+        ttl: 5
+        targetCallsign: "VK2XYZ"
+        offer:
+          type: "offer"
+          sdp: "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\n..."
+        dataChannels: ["http", "collaboration"]
+        priority: "normal"
+
+    PeerListExample:
+      value:
+        type: "peer-list"
+        messageId: "770e8400-e29b-41d4-a716-446655440002"
+        timestamp: "2025-09-15T10:32:00Z"
+        fromCallsign: "SIGNALING-SERVER"
+        sequenceNumber: 100
+        ttl: 1
+        peers:
+          - callsign: "VK2XYZ"
+            peerId: "880e8400-e29b-41d4-a716-446655440003"
+            capabilities: ["WebRTC", "PageBuilder"]
+            lastSeen: "2025-09-15T10:31:45Z"
+            protocolVersion: "1.0"
+            geolocation: "QF56aa"
+            connectionLatency: 150
+
+# Protocol Flow Documentation
+info:
+  description: |
+    ## Connection Flow
+
+    1. **Registration**: Station connects to signaling server and sends `register` message
+    2. **Peer Discovery**: Server responds with `peer-list` message containing available stations
+    3. **Connection Initiation**: Station sends `offer` message for target peer
+    4. **Connection Response**: Target peer responds with `answer` message
+    5. **ICE Exchange**: Both peers exchange `candidate` messages for NAT traversal
+    6. **WebRTC Established**: Peers connected directly, signaling server no longer needed
+
+    ## Mesh Forwarding (Future Enhancement)
+
+    To reduce noise in mesh networks:
+    - Messages include mesh forwarding headers with hop count and seen-by list
+    - Probabilistic forwarding based on hop count reduces message storms
+    - Geographic routing using ham radio grid squares for efficiency
+    - TTL prevents infinite loops in complex network topologies
+
+    ## Noise Reduction Strategies
+
+    1. **Sequence Number Deduplication**: Prevent duplicate message processing
+    2. **Seen-By Lists**: Track which stations have processed each message
+    3. **TTL Limits**: Prevent infinite message propagation
+    4. **Probabilistic Forwarding**: Reduce forwarding probability with hop count
+    5. **Geographic Routing**: Forward toward target grid square only
+
+    ## Native WebSocket Implementation
+
+    ```javascript
+    // Server message handling
+    ws.on('message', (data) => {
+      const message = JSON.parse(data);
+
+      // Validate message structure
+      if (!validateSignalingMessage(message)) {
+        sendError(ws, 'invalid_message', 'Message validation failed');
+        return;
+      }
+
+      // Handle by message type
+      switch (message.type) {
+        case 'register':
+          handleRegister(ws, message);
+          break;
+        case 'offer':
+          forwardToTarget(message.targetCallsign, message);
+          break;
+        // ... other message types
+      }
+    });
+    ```

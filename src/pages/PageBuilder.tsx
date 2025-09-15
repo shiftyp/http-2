@@ -24,12 +24,214 @@ import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/Alert';
 import { renderComponentForRadio } from '../lib/react-renderer';
 import { HamRadioCompressor } from '../lib/compression';
-import { ProtobufLivePreview } from '../components/ProtobufLivePreview';
+import { BinaryLivePreview } from '../components/ProtobufLivePreview';
 import { db } from '../lib/database';
 import { GridCanvas } from '../components/PageBuilder/GridCanvas';
 import { ComponentPalette } from '../components/PageBuilder/ComponentPalette';
 import { PropertyEditor } from '../components/PageBuilder/PropertyEditor';
 import { PreviewPanel } from '../components/PageBuilder/PreviewPanel';
+
+// Markdown to HTML converter for preview
+const convertMarkdownToHTML = (markdown: string, baseStyle: string): string => {
+  const lines = markdown.split('\n');
+  const htmlElements: string[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    if (!line) {
+      i++;
+      continue;
+    }
+
+    // Headings
+    if (line.startsWith('#')) {
+      const level = line.match(/^#+/)?.[0].length || 1;
+      const content = line.replace(/^#+\s*/, '');
+      const tag = level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3';
+      htmlElements.push(`<${tag} style="${baseStyle}font-weight: bold; margin-bottom: 8px;">${content}</${tag}>`);
+    }
+    // Tables
+    else if (line.includes('|')) {
+      const tableRows: string[] = [];
+      let j = i;
+
+      while (j < lines.length && lines[j].trim().includes('|')) {
+        const tableLine = lines[j].trim();
+        if (!tableLine.match(/^\|[\s\-\|]+\|$/)) { // Skip separator rows
+          tableRows.push(tableLine);
+        }
+        j++;
+      }
+
+      if (tableRows.length > 0) {
+        const rows = tableRows.map(row =>
+          row.split('|').map(cell => cell.trim()).filter(cell => cell)
+        );
+
+        let tableHTML = `<table style="${baseStyle}border-collapse: collapse; border: 1px solid #666; margin-bottom: 8px;">`;
+        rows.forEach(row => {
+          tableHTML += '<tr>';
+          row.forEach(cell => {
+            tableHTML += `<td style="border: 1px solid #666; padding: 4px 8px; font-size: 14px;">${cell}</td>`;
+          });
+          tableHTML += '</tr>';
+        });
+        tableHTML += '</table>';
+        htmlElements.push(tableHTML);
+      }
+
+      i = j;
+      continue;
+    }
+    // Lists
+    else if (line.startsWith('-') || line.startsWith('*')) {
+      const listItems: string[] = [];
+      let j = i;
+
+      while (j < lines.length && (lines[j].trim().startsWith('-') || lines[j].trim().startsWith('*'))) {
+        listItems.push(lines[j].trim().replace(/^[\-\*]\s*/, ''));
+        j++;
+      }
+
+      if (listItems.length > 0) {
+        let listHTML = `<ul style="${baseStyle}margin-bottom: 8px; padding-left: 20px;">`;
+        listItems.forEach(item => {
+          listHTML += `<li style="margin-bottom: 4px;">${item}</li>`;
+        });
+        listHTML += '</ul>';
+        htmlElements.push(listHTML);
+      }
+
+      i = j;
+      continue;
+    }
+    // Links
+    else if (line.includes('[') && line.includes('](')) {
+      const linkMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        const [, linkText, url] = linkMatch;
+        htmlElements.push(`<a href="${url}" style="${baseStyle}color: #60a5fa; text-decoration: underline; display: block; margin-bottom: 8px;">${linkText}</a>`);
+      }
+    }
+    // Regular paragraphs
+    else {
+      let content = line;
+      content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      htmlElements.push(`<p style="${baseStyle}margin-bottom: 8px;">${content}</p>`);
+    }
+
+    i++;
+  }
+
+  return htmlElements.join('\n');
+};
+
+// Convert markdown to radio transmission components
+const convertMarkdownToComponents = (markdown: string, styleObj: any, baseKey: string): any[] => {
+  const lines = markdown.split('\n');
+  const components: any[] = [];
+  let componentIndex = 0;
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    if (!line) {
+      i++;
+      continue;
+    }
+
+    // Headings
+    if (line.startsWith('#')) {
+      const content = line.replace(/^#+\s*/, '');
+      components.push({
+        type: 'heading',
+        properties: { text: content, style: styleObj },
+        key: `${baseKey}-heading-${componentIndex++}`
+      });
+    }
+    // Tables
+    else if (line.includes('|')) {
+      const tableRows: string[] = [];
+      let j = i;
+
+      while (j < lines.length && lines[j].trim().includes('|')) {
+        const tableLine = lines[j].trim();
+        if (!tableLine.match(/^\|[\s\-\|]+\|$/)) { // Skip separator rows
+          tableRows.push(tableLine);
+        }
+        j++;
+      }
+
+      if (tableRows.length > 0) {
+        const tableContent = tableRows.map(row =>
+          row.split('|').map(cell => cell.trim()).filter(cell => cell).join(' | ')
+        ).join('\n');
+
+        components.push({
+          type: 'table',
+          properties: { text: tableContent, style: styleObj },
+          key: `${baseKey}-table-${componentIndex++}`
+        });
+      }
+
+      i = j;
+      continue;
+    }
+    // Lists
+    else if (line.startsWith('-') || line.startsWith('*')) {
+      const listItems: string[] = [];
+      let j = i;
+
+      while (j < lines.length && (lines[j].trim().startsWith('-') || lines[j].trim().startsWith('*'))) {
+        listItems.push(lines[j].trim().replace(/^[\-\*]\s*/, ''));
+        j++;
+      }
+
+      if (listItems.length > 0) {
+        components.push({
+          type: 'list',
+          properties: { text: listItems.join('\n'), style: styleObj },
+          key: `${baseKey}-list-${componentIndex++}`
+        });
+      }
+
+      i = j;
+      continue;
+    }
+    // Links
+    else if (line.includes('[') && line.includes('](')) {
+      const linkMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        const [, linkText, url] = linkMatch;
+        components.push({
+          type: 'link',
+          properties: { text: linkText, href: url, style: styleObj },
+          key: `${baseKey}-link-${componentIndex++}`
+        });
+      }
+    }
+    // Regular paragraphs
+    else {
+      let content = line;
+      content = content.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold markers for transmission
+      content = content.replace(/\*(.*?)\*/g, '$1'); // Remove italic markers for transmission
+
+      components.push({
+        type: 'paragraph',
+        properties: { text: content, style: styleObj },
+        key: `${baseKey}-paragraph-${componentIndex++}`
+      });
+    }
+
+    i++;
+  }
+
+  return components;
+};
 
 // Types
 export interface PageComponent {
@@ -54,7 +256,8 @@ export enum ComponentType {
   TABLE = 'table',
   LIST = 'list',
   CONTAINER = 'container',
-  DIVIDER = 'divider'
+  DIVIDER = 'divider',
+  MARKDOWN = 'markdown'
 }
 
 export interface GridPosition {
@@ -110,6 +313,7 @@ export interface GridLayout {
   columns: number;
   rows: number;
   gap: number;
+  columnSizes: string[]; // Array of CSS grid sizes (e.g., ['1fr', '1fr', '1fr'])
   responsive: ResponsiveBreakpoint[];
 }
 
@@ -143,15 +347,16 @@ const PageBuilder: React.FC = () => {
   // React renderer for component-to-radio conversion with bandwidth optimization
   const compressor = new HamRadioCompressor();
 
-  // Grid layout configuration
+  // Grid layout configuration - start with single column
   const [gridLayout, setGridLayout] = useState<GridLayout>({
-    columns: 12,
+    columns: 1,
     rows: 12,
     gap: 8,
+    columnSizes: ['1fr'], // Single column taking full width
     responsive: [
-      { maxWidth: 768, columns: 4, stackComponents: true },
-      { maxWidth: 1024, columns: 8 },
-      { maxWidth: 1440, columns: 12 }
+      { maxWidth: 768, columns: 1, stackComponents: true },
+      { maxWidth: 1024, columns: 2 },
+      { maxWidth: 1440, columns: 3 }
     ]
   });
 
@@ -192,10 +397,6 @@ const PageBuilder: React.FC = () => {
     })
   );
 
-  // Debug sensor events
-  useEffect(() => {
-    console.log('Sensors configured:', sensors.length);
-  }, [sensors]);
 
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
@@ -231,7 +432,7 @@ const PageBuilder: React.FC = () => {
       const newComponent: PageComponent = {
         id: `component-${Date.now()}`,
         type: active.data.current.type,
-        gridArea: over.data.current?.gridPosition || { row: 1, col: 1, rowSpan: 1, colSpan: 3 },
+        gridArea: over.data.current?.gridPosition || { row: 1, col: 1, rowSpan: 1, colSpan: 1 },
         properties: getDefaultProps(active.data.current.type),
         style: {
           basic: {
@@ -303,14 +504,14 @@ const PageBuilder: React.FC = () => {
 
     // Find first available position
     for (let row = 1; row <= gridLayout.rows; row++) {
-      for (let col = 1; col <= gridLayout.columns - 2; col++) { // Leave space for default 3-col span
-        const position = { row, col, rowSpan: 1, colSpan: 3 };
+      for (let col = 1; col <= gridLayout.columnSizes.length; col++) { // Check all available columns
+        const position = { row, col, rowSpan: 1, colSpan: gridLayout.columnSizes.length };
         let canPlace = true;
 
         // Check if this position is available
         for (let r = row; r < row + position.rowSpan; r++) {
           for (let c = col; c < col + position.colSpan; c++) {
-            if (c > gridLayout.columns || occupiedCells.has(`${r}-${c}`)) {
+            if (c > gridLayout.columnSizes.length || occupiedCells.has(`${r}-${c}`)) {
               canPlace = false;
               break;
             }
@@ -325,7 +526,7 @@ const PageBuilder: React.FC = () => {
     }
 
     // If no space found, place at end
-    return { row: 1, col: 1, rowSpan: 1, colSpan: 3 };
+    return { row: 1, col: 1, rowSpan: 1, colSpan: gridLayout.columnSizes.length };
   };
 
   // Handle keyboard component insertion
@@ -421,6 +622,64 @@ const PageBuilder: React.FC = () => {
     ));
   };
 
+  // Column management functions
+  const addColumnLeft = () => {
+    const newColumnSizes = ['1fr', ...gridLayout.columnSizes];
+    const newLayout = {
+      ...gridLayout,
+      columns: gridLayout.columns + 1,
+      columnSizes: newColumnSizes
+    };
+
+    // Shift existing components to the right
+    const updatedComponents = components.map(comp => ({
+      ...comp,
+      gridArea: {
+        ...comp.gridArea,
+        col: comp.gridArea.col + 1
+      }
+    }));
+
+    setGridLayout(newLayout);
+    setComponents(updatedComponents);
+  };
+
+  const addColumnRight = () => {
+    const newColumnSizes = [...gridLayout.columnSizes, '1fr'];
+    const newLayout = {
+      ...gridLayout,
+      columns: gridLayout.columns + 1,
+      columnSizes: newColumnSizes
+    };
+
+    setGridLayout(newLayout);
+  };
+
+  const removeColumn = (columnIndex: number) => {
+    if (gridLayout.columns <= 1) return; // Keep at least one column
+
+    const newColumnSizes = gridLayout.columnSizes.filter((_, index) => index !== columnIndex);
+    const newLayout = {
+      ...gridLayout,
+      columns: gridLayout.columns - 1,
+      columnSizes: newColumnSizes
+    };
+
+    // Remove components in the deleted column and adjust positions
+    const updatedComponents = components
+      .filter(comp => comp.gridArea.col !== columnIndex + 1) // Remove components in deleted column
+      .map(comp => ({
+        ...comp,
+        gridArea: {
+          ...comp.gridArea,
+          col: comp.gridArea.col > columnIndex + 1 ? comp.gridArea.col - 1 : comp.gridArea.col
+        }
+      }));
+
+    setGridLayout(newLayout);
+    setComponents(updatedComponents);
+  };
+
   // Count total nested children recursively
   const countNestedChildren = (component: PageComponent): number => {
     if (!component.children || component.children.length === 0) return 0;
@@ -463,7 +722,7 @@ const PageBuilder: React.FC = () => {
         id: `component-${Date.now()}`,
         gridArea: {
           ...component.gridArea,
-          col: Math.min(component.gridArea.col + component.gridArea.colSpan, gridLayout.columns - component.gridArea.colSpan)
+          col: Math.min(component.gridArea.col + component.gridArea.colSpan, gridLayout.columnSizes.length - component.gridArea.colSpan)
         }
       };
       setComponents([...components, newComponent]);
@@ -509,10 +768,13 @@ const PageBuilder: React.FC = () => {
           };
         case ComponentType.DIVIDER:
           return { type: 'divider', properties: { style: styleObj }, key };
+        case ComponentType.MARKDOWN:
+          // Markdown component is for editing only - don't transmit over radio
+          return null;
         default:
           return { type: 'text', properties: { text: properties.content || '', style: styleObj }, key };
       }
-    });
+    }).filter(component => component !== null);
   };
 
   // Generate preview HTML (for backward compatibility)
@@ -537,6 +799,9 @@ const PageBuilder: React.FC = () => {
           return `<img src="${properties.src || ''}" alt="${properties.alt || ''}" style="${styleStr}" />`;
         case ComponentType.DIVIDER:
           return `<hr style="${styleStr}" />`;
+        case ComponentType.MARKDOWN:
+          // Markdown component shows converted content in preview
+          return convertMarkdownToHTML(properties.content || '', styleStr);
         default:
           return `<div style="${styleStr}">${properties.content || ''}</div>`;
       }
@@ -761,12 +1026,17 @@ const PageBuilder: React.FC = () => {
           {/* Canvas or Preview */}
           <div
             className="flex-1 overflow-auto p-8 bg-gray-900 relative focus:outline-none"
-            tabIndex={0}
+            tabIndex={selectedComponent ? -1 : 0}
             role="region"
             aria-label={previewMode ? "Page Preview" : "Design Canvas"}
             aria-describedby="canvas-status canvas-instructions"
             aria-live="polite"
             onKeyDown={(e) => {
+              // Don't handle any shortcuts when property modal is open
+              if (selectedComponent) {
+                return;
+              }
+
               // Keyboard shortcuts
               if (e.ctrlKey || e.metaKey) {
                 switch (e.key) {
@@ -837,7 +1107,7 @@ const PageBuilder: React.FC = () => {
                     newGridArea.col = Math.max(1, newGridArea.col - 1);
                     break;
                   case 'ArrowRight':
-                    newGridArea.col = Math.min(gridLayout.columns - newGridArea.colSpan + 1, newGridArea.col + 1);
+                    newGridArea.col = Math.min(gridLayout.columnSizes.length - newGridArea.colSpan + 1, newGridArea.col + 1);
                     break;
                 }
 
@@ -865,7 +1135,7 @@ const PageBuilder: React.FC = () => {
                     break;
                   case 'ArrowRight':
                     // Increase width
-                    newGridArea.colSpan = Math.min(gridLayout.columns - newGridArea.col + 1, newGridArea.colSpan + 1);
+                    newGridArea.colSpan = Math.min(gridLayout.columnSizes.length - newGridArea.col + 1, newGridArea.colSpan + 1);
                     break;
                 }
 
@@ -909,6 +1179,36 @@ const PageBuilder: React.FC = () => {
               </div>
             ) : (
               <div role="region" aria-label="Design Canvas">
+                {/* Column Controls */}
+                <div className="flex items-center justify-center mb-4 gap-2 p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <Button
+                    onClick={addColumnLeft}
+                    className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    aria-label="Add column to the left"
+                  >
+                    ← Add Column
+                  </Button>
+                  <div className="flex items-center gap-1 px-3 py-1 bg-gray-700 rounded text-xs text-gray-300">
+                    <span>{gridLayout.columnSizes.length} columns</span>
+                    <span className="text-gray-500">({gridLayout.columnSizes.join(', ')})</span>
+                  </div>
+                  <Button
+                    onClick={addColumnRight}
+                    className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    aria-label="Add column to the right"
+                  >
+                    Add Column →
+                  </Button>
+                  {gridLayout.columnSizes.length > 1 && (
+                    <Button
+                      onClick={() => removeColumn(gridLayout.columnSizes.length - 1)}
+                      className="px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded"
+                      aria-label="Remove last column"
+                    >
+                      ✕ Remove
+                    </Button>
+                  )}
+                </div>
                 <GridCanvas
                   ref={gridRef}
                   components={components}
@@ -1068,10 +1368,10 @@ const PageBuilder: React.FC = () => {
         </div>
       </div>
 
-      {/* Protobuf Live Preview */}
-      <ProtobufLivePreview
+      {/* Binary Live Preview */}
+      <BinaryLivePreview
         components={generateReactComponents()}
-        isVisible={components.length > 0}
+        isVisible={components.length > 0 && !selectedComponent}
         enableTransmission={true}
       />
     </DndContext>

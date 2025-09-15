@@ -1,0 +1,402 @@
+openapi: 3.0.3
+info:
+  title: Content Discovery API
+  description: API for managing content discovered via SDR monitoring
+  version: 1.0.0
+
+paths:
+  /api/discovery/transmissions:
+    get:
+      summary: Get decoded transmissions
+      description: Returns all successfully decoded HTTP-over-radio transmissions
+      parameters:
+        - name: sourceCallsign
+          in: query
+          schema:
+            type: string
+          description: Filter by source callsign
+        - name: contentType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContentType'
+        - name: verified
+          in: query
+          schema:
+            type: boolean
+          description: Filter by verification status
+        - name: timeWindow
+          in: query
+          schema:
+            type: number
+            default: 3600
+          description: Time window in seconds
+      responses:
+        '200':
+          description: List of decoded transmissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecodedTransmission'
+
+    post:
+      summary: Report decoded transmission
+      description: Report a newly decoded transmission for processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportTransmissionRequest'
+      responses:
+        '201':
+          description: Transmission processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecodedTransmission'
+        '400':
+          description: Invalid transmission data
+
+  /api/discovery/transmissions/{transmissionId}:
+    parameters:
+      - name: transmissionId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: Get transmission details
+      responses:
+        '200':
+          description: Transmission details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecodedTransmission'
+        '404':
+          description: Transmission not found
+
+  /api/discovery/cache:
+    get:
+      summary: Get cached content
+      description: Returns content chunks cached from SDR monitoring
+      parameters:
+        - name: sourceCallsign
+          in: query
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [discoveredAt, accessCount, signalQuality]
+            default: discoveredAt
+        - name: limit
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: List of cached content
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CachedContent'
+
+    delete:
+      summary: Clear expired cache
+      description: Remove expired content from auto-discovery cache
+      responses:
+        '204':
+          description: Cache cleared successfully
+
+  /api/discovery/cache/{chunkId}:
+    parameters:
+      - name: chunkId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: Get cached chunk
+      description: Retrieve specific cached content chunk
+      responses:
+        '200':
+          description: Cached content chunk
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CachedContent'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Raw chunk data
+        '404':
+          description: Chunk not found
+
+    delete:
+      summary: Remove cached chunk
+      responses:
+        '204':
+          description: Chunk removed from cache
+        '404':
+          description: Chunk not found
+
+  /api/discovery/stats:
+    get:
+      summary: Get discovery statistics
+      description: Returns statistics about content discovery performance
+      responses:
+        '200':
+          description: Discovery statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryStats'
+
+  /api/discovery/beacons:
+    get:
+      summary: Get CQ beacon information
+      description: Returns decoded CQ beacons with routing information
+      parameters:
+        - name: timeWindow
+          in: query
+          schema:
+            type: number
+            default: 1800
+          description: Time window in seconds
+      responses:
+        '200':
+          description: CQ beacon data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CQBeacon'
+
+components:
+  schemas:
+    DecodedTransmission:
+      type: object
+      properties:
+        id:
+          type: string
+        sourceCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        frequency:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+        signalQuality:
+          $ref: '#/components/schemas/SignalQuality'
+        contentType:
+          $ref: '#/components/schemas/ContentType'
+        verified:
+          type: boolean
+        cached:
+          type: boolean
+        payloadSize:
+          type: number
+          description: Size of decoded payload in bytes
+      required:
+        - id
+        - sourceCallsign
+        - frequency
+        - timestamp
+        - signalQuality
+        - contentType
+        - verified
+
+    ReportTransmissionRequest:
+      type: object
+      properties:
+        sourceCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        frequency:
+          type: number
+        signalQuality:
+          $ref: '#/components/schemas/SignalQuality'
+        contentType:
+          $ref: '#/components/schemas/ContentType'
+        payload:
+          type: string
+          format: base64
+          description: Base64 encoded payload data
+      required:
+        - sourceCallsign
+        - frequency
+        - signalQuality
+        - contentType
+        - payload
+
+    SignalQuality:
+      type: object
+      properties:
+        snr:
+          type: number
+          description: Signal-to-noise ratio in dB
+        rssi:
+          type: number
+          description: Received signal strength in dB
+        frequency:
+          type: number
+          description: Actual received frequency in Hz
+        frequencyOffset:
+          type: number
+          description: Frequency offset in Hz
+        symbolErrorRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        phaseJitter:
+          type: number
+          description: Phase jitter in degrees
+      required:
+        - snr
+        - rssi
+        - frequency
+
+    CachedContent:
+      type: object
+      properties:
+        chunkId:
+          type: string
+        contentHash:
+          type: string
+          description: SHA-256 hash of content
+        sourceCallsign:
+          type: string
+        discoveredAt:
+          type: string
+          format: date-time
+        lastAccessed:
+          type: string
+          format: date-time
+        accessCount:
+          type: number
+        size:
+          type: number
+          description: Content size in bytes
+        expiresAt:
+          type: string
+          format: date-time
+        signalQuality:
+          $ref: '#/components/schemas/SignalQuality'
+      required:
+        - chunkId
+        - contentHash
+        - sourceCallsign
+        - discoveredAt
+        - size
+        - expiresAt
+
+    DiscoveryStats:
+      type: object
+      properties:
+        totalTransmissions:
+          type: number
+        verifiedTransmissions:
+          type: number
+        cachedChunks:
+          type: number
+        cacheHitRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        averageSignalQuality:
+          type: number
+        topSourceCallsigns:
+          type: array
+          items:
+            type: object
+            properties:
+              callsign:
+                type: string
+              transmissionCount:
+                type: number
+        bandActivity:
+          type: array
+          items:
+            type: object
+            properties:
+              band:
+                type: string
+              transmissionCount:
+                type: number
+              averageSnr:
+                type: number
+        cacheUtilization:
+          type: object
+          properties:
+            totalEntries:
+              type: number
+            totalSizeBytes:
+              type: number
+            oldestEntry:
+              type: string
+              format: date-time
+            newestEntry:
+              type: string
+              format: date-time
+
+    CQBeacon:
+      type: object
+      properties:
+        callsign:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        frequency:
+          type: number
+        signalQuality:
+          $ref: '#/components/schemas/SignalQuality'
+        status:
+          type: string
+        meshId:
+          type: string
+        availableChunks:
+          type: array
+          items:
+            type: string
+        routingInfo:
+          type: array
+          items:
+            type: object
+            properties:
+              contentId:
+                type: string
+              path:
+                type: string
+        monitoringBands:
+          type: array
+          items:
+            type: string
+        discoveredContent:
+          type: array
+          items:
+            type: object
+            properties:
+              contentId:
+                type: string
+              lastSeen:
+                type: string
+                format: date-time
+
+    ContentType:
+      type: string
+      enum: [CHUNK, CQ_BEACON, ROUTE_UPDATE]

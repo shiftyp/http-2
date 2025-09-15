@@ -1,15 +1,15 @@
 /**
- * Compact Protobuf Live Preview for Page Builder
- * Shows real-time protobuf compression stats and sends data via postMessage (simulates radio)
+ * Compact Binary Live Preview for Page Builder
+ * Shows real-time binary compression stats and sends data via postMessage (simulates radio)
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { renderComponentForRadio, renderComponentFromRadio, ProtobufComponentData } from '../lib/react-renderer';
 
-interface ProtobufLivePreviewProps {
+interface BinaryLivePreviewProps {
   components: any[]; // Page components from the builder
   isVisible?: boolean;
-  enableTransmission?: boolean; // Enable actual protobuf transmission test
+  enableTransmission?: boolean; // Enable actual binary transmission test
 }
 
 interface CompressionStats {
@@ -41,15 +41,17 @@ const MockPageComponent: React.FC<{ component: any }> = ({ component }) => {
   }
 };
 
-export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
+export const BinaryLivePreview: React.FC<BinaryLivePreviewProps> = ({
   components,
   isVisible = true,
   enableTransmission = true
 }) => {
+  // Temporarily disable if we detect constant re-rendering
+  if (!isVisible) return null;
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [protobufData, setProtobufData] = useState<ProtobufComponentData[]>([]);
+  const [binaryData, setBinaryData] = useState<ProtobufComponentData[]>([]);
   const [previewWindow, setPreviewWindow] = useState<Window | null>(null);
   const [transmissionLog, setTransmissionLog] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -77,8 +79,9 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
           // Create a mock React element for this component
           const mockElement = React.createElement(MockPageComponent, { component });
 
-          // Render to protobuf
-          const result = await renderComponentForRadio(MockPageComponent, { component }, {
+          // Pass component properties directly to the binary encoder
+          // The renderComponentForRadio will handle all optimization
+          const result = await renderComponentForRadio(MockPageComponent, component.properties || {}, {
             componentType: component.type || 'UnknownComponent'
           });
 
@@ -111,8 +114,8 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
         estimatedTransmissionTime
       });
 
-      // Store protobuf data for transmission
-      setProtobufData(results);
+      // Store binary data for transmission
+      setBinaryData(results);
     } catch (error) {
       console.error('Failed to analyze components:', error);
       setError(error instanceof Error ? error.message : 'Analysis failed');
@@ -124,19 +127,19 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
   // Re-analyze when components change
   useEffect(() => {
     analyzeComponents();
-  }, [analyzeComponents]);
+  }, [components]);
 
   // Simulate radio transmission via postMessage
   const simulateTransmission = () => {
-    if (!protobufData.length) return;
+    if (!binaryData.length) return;
 
     const log: string[] = [];
-    log.push(`🔄 Starting transmission of ${protobufData.length} components...`);
+    log.push(`🔄 Starting transmission of ${binaryData.length} components...`);
 
     // Open preview window or use existing one
     let targetWindow = previewWindow;
     if (!targetWindow || targetWindow.closed) {
-      targetWindow = window.open('', 'protobuf-preview', 'width=600,height=400,scrollbars=yes');
+      targetWindow = window.open('', 'binary-preview', 'width=600,height=400,scrollbars=yes');
       if (targetWindow) {
         setPreviewWindow(targetWindow);
 
@@ -153,7 +156,7 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
               </style>
             </head>
             <body>
-              <h1>📡 Ham Radio Receiver - Protobuf Hydration</h1>
+              <h1>📡 Ham Radio Receiver - Binary Hydration</h1>
               <div id="transmission-log"></div>
               <div id="components-container"></div>
 
@@ -162,19 +165,19 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
                 const container = document.getElementById('components-container');
 
                 window.addEventListener('message', (event) => {
-                  if (event.data.type === 'PROTOBUF_TRANSMISSION') {
-                    const { protobufData, componentIndex, totalComponents } = event.data;
+                  if (event.data.type === 'BINARY_TRANSMISSION') {
+                    const { binaryData, componentIndex, totalComponents } = event.data;
 
-                    log.innerHTML += '<div>📦 Received component ' + (componentIndex + 1) + '/' + totalComponents + ': ' + protobufData.componentType + ' (' + protobufData.compressedSize + ' bytes)</div>';
+                    log.innerHTML += '<div>📦 Received component ' + (componentIndex + 1) + '/' + totalComponents + ': ' + binaryData.componentType + ' (' + binaryData.compressedSize + ' bytes)</div>';
 
                     // In a real implementation, this would use renderComponentFromRadio
                     // For demo, just show the received data
                     const componentDiv = document.createElement('div');
                     componentDiv.className = 'component';
-                    componentDiv.innerHTML = '<h3>Component: ' + protobufData.componentType + '</h3>' +
-                                           '<div>Protobuf Size: ' + protobufData.compressedSize + ' bytes</div>' +
-                                           '<div>Compression: ' + protobufData.ratio.toFixed(2) + 'x</div>' +
-                                           '<div>Schema ID: ' + protobufData.componentSchema + '</div>';
+                    componentDiv.innerHTML = '<h3>Component: ' + binaryData.componentType + '</h3>' +
+                                           '<div>Binary Size: ' + binaryData.compressedSize + ' bytes</div>' +
+                                           '<div>Compression: ' + binaryData.ratio.toFixed(2) + 'x</div>' +
+                                           '<div>Schema ID: ' + binaryData.componentSchema + '</div>';
                     container.appendChild(componentDiv);
                   }
 
@@ -205,25 +208,25 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
     }
 
     // Send each component via postMessage (simulating radio packets)
-    protobufData.forEach((data, index) => {
+    binaryData.forEach((data, index) => {
       setTimeout(() => {
         targetWindow!.postMessage({
-          type: 'PROTOBUF_TRANSMISSION',
-          protobufData: {
+          type: 'BINARY_TRANSMISSION',
+          binaryData: {
             componentType: data.componentType,
             compressedSize: data.compressedSize,
             originalSize: data.originalSize,
             ratio: data.ratio,
             componentSchema: data.componentSchema,
-            // Note: In real transmission, we'd send the actual protobufData: data.protobufData
+            // Note: In real transmission, we'd send the actual binaryData: data.protobufData
             // but for demo purposes, we're just sending metadata
           },
           componentIndex: index,
-          totalComponents: protobufData.length
+          totalComponents: binaryData.length
         }, '*');
 
         log.push(`📡 Transmitted ${data.componentType} (${data.compressedSize} bytes)`);
-        if (index === protobufData.length - 1) {
+        if (index === binaryData.length - 1) {
           setTimeout(() => {
             targetWindow!.postMessage({
               type: 'TRANSMISSION_COMPLETE',
@@ -286,8 +289,8 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
         <div>
           <div style={{ marginBottom: '8px' }}>
             <div>📦 Components: <strong>{compressionStats.totalComponents}</strong></div>
-            <div>📊 JSON size: <strong>{compressionStats.originalSize}B</strong></div>
-            <div>🗜️ Protobuf: <strong style={{ color: '#0ff' }}>{compressionStats.compressedSize}B</strong></div>
+            <div>📊 Text size: <strong>{compressionStats.originalSize}B</strong></div>
+            <div>🗜️ Binary: <strong style={{ color: '#0ff' }}>{compressionStats.compressedSize}B</strong></div>
             <div>📈 Compression: <strong style={{ color: '#ff0' }}>{compressionStats.totalRatio.toFixed(1)}x</strong></div>
           </div>
 
@@ -321,15 +324,15 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
             <div style={{ marginTop: '8px' }}>
               <button
                 onClick={simulateTransmission}
-                disabled={!protobufData.length || isAnalyzing}
+                disabled={!binaryData.length || isAnalyzing}
                 style={{
                   width: '100%',
                   padding: '6px',
-                  backgroundColor: protobufData.length ? '#0f0' : '#333',
-                  color: protobufData.length ? '#000' : '#666',
+                  backgroundColor: binaryData.length ? '#0f0' : '#333',
+                  color: binaryData.length ? '#000' : '#666',
                   border: '1px solid #0f0',
                   borderRadius: '2px',
-                  cursor: protobufData.length ? 'pointer' : 'not-allowed',
+                  cursor: binaryData.length ? 'pointer' : 'not-allowed',
                   fontSize: '10px',
                   marginBottom: '4px'
                 }}
@@ -364,7 +367,7 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
             fontSize: '9px',
             color: '#888'
           }}>
-            💡 Components sent as binary protobuf data + schemas cached in PWA
+            💡 Components sent as binary field data + schemas cached in PWA
             {enableTransmission && <div>📡 Click transmission button to test via postMessage</div>}
           </div>
         </div>
@@ -373,4 +376,4 @@ export const ProtobufLivePreview: React.FC<ProtobufLivePreviewProps> = ({
   );
 };
 
-export default ProtobufLivePreview;
+export default BinaryLivePreview;

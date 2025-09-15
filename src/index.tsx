@@ -13,18 +13,7 @@ initDatabase().then(() => {
   console.error('Failed to initialize database:', error);
 });
 
-// Register service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(registration => {
-        console.log('Service Worker registered:', registration.scope);
-      })
-      .catch(error => {
-        console.error('Service Worker registration failed:', error);
-      });
-  });
-}
+// Service worker registration is handled in main.tsx
 
 // Check for Web Serial API support
 if (!('serial' in navigator)) {

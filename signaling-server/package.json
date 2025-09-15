@@ -1,0 +1,31 @@
+{
+  "name": "ham-radio-webrtc-signaling",
+  "version": "1.0.0",
+  "description": "Native WebSocket signaling server for ham radio WebRTC connections",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "ham-radio",
+    "webrtc",
+    "signaling",
+    "websocket",
+    "amateur-radio"
+  ],
+  "author": "Ham Radio WebRTC Project",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ham-radio/webrtc-signaling.git"
+  }
+}

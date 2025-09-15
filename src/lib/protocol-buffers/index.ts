@@ -8,6 +8,8 @@
  * - Handles schema transmission before data
  */
 
+import { HamRadioCompressor } from '../compression';
+
 // Schema field types
 export enum FieldType {
   VARINT = 0,    // int32, int64, uint32, uint64, sint32, sint64, bool, enum
@@ -74,6 +76,7 @@ export class DynamicProtocolBuffer {
   private schemas = new Map<string, SchemaDefinition>();
   private fieldNumbers = new Map<string, number>();
   private nextFieldNumber = 1;
+  private compressor = new HamRadioCompressor();
 
   /**
    * Generate schema dynamically from data object
@@ -314,7 +317,12 @@ export class DynamicProtocolBuffer {
         break;
 
       case FieldType.LENGTH_DELIMITED:
-        if (typeof value === 'string') {
+        if (typeof value === 'string' && field.dataType === FieldDataType.STRING) {
+          // Apply adaptive text compression for text content
+          const compressedText = this.compressText(value);
+          buffer.writeVarint(compressedText.length);
+          buffer.writeBytes(compressedText);
+        } else if (typeof value === 'string') {
           const bytes = new TextEncoder().encode(value);
           buffer.writeVarint(bytes.length);
           buffer.writeBytes(bytes);
@@ -366,6 +374,22 @@ export class DynamicProtocolBuffer {
   }
 
   /**
+   * Compress text using HamRadioCompressor adaptive compression
+   */
+  private compressText(text: string): Uint8Array {
+    const result = this.compressor.compressHTML(text);
+    return new TextEncoder().encode(JSON.stringify(result.compressed));
+  }
+
+  /**
+   * Decompress text using HamRadioCompressor
+   */
+  private decompressText(data: Uint8Array): string {
+    const compressedData = JSON.parse(new TextDecoder().decode(data));
+    return this.compressor.decompressHTML(compressedData);
+  }
+
+  /**
    * Decode individual field value
    */
   private decodeField(field: FieldDescriptor, buffer: ByteReader, wireType: number): any {
@@ -385,7 +409,13 @@ export class DynamicProtocolBuffer {
         const bytes = buffer.readBytes(length);
 
         if (field.dataType === FieldDataType.STRING) {
-          return new TextDecoder().decode(bytes);
+          // Try to decompress if it's compressed text data
+          try {
+            return this.decompressText(bytes);
+          } catch {
+            // Fallback to regular string decoding
+            return new TextDecoder().decode(bytes);
+          }
         } else if (field.dataType === FieldDataType.BYTES) {
           return bytes;
         } else if (field.dataType === FieldDataType.OBJECT) {

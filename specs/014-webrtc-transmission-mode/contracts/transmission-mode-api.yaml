@@ -1,0 +1,869 @@
+openapi: 3.0.3
+info:
+  title: WebRTC Transmission Mode API
+  description: API for managing dual-mode transmission (RF and WebRTC) with native WebSocket signaling
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /transmission/mode:
+    get:
+      summary: Get current transmission mode status
+      description: Returns the current transmission mode and connection status
+      tags:
+        - Transmission Mode
+      responses:
+        '200':
+          description: Current transmission mode status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransmissionModeStatus'
+        '503':
+          description: Transmission system unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Switch transmission mode
+      description: Change between RF and WebRTC transmission modes
+      tags:
+        - Transmission Mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransmissionModeSwitch'
+      responses:
+        '200':
+          description: Mode switch successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransmissionModeStatus'
+        '400':
+          description: Invalid mode or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Mode switch failed - already in progress or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transmission/peers/discover:
+    post:
+      summary: Start peer discovery scan
+      description: Initiate discovery of WebRTC-capable stations on local network and via signaling server
+      tags:
+        - Peer Discovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoveryRequest'
+      responses:
+        '202':
+          description: Discovery scan started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoverySession'
+        '400':
+          description: Invalid discovery parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: Get discovered peers
+      description: Retrieve list of discovered WebRTC-capable stations (local and internet)
+      tags:
+        - Peer Discovery
+      parameters:
+        - name: discoveryId
+          in: query
+          description: Discovery session ID to retrieve results for
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          description: Filter by connection type
+          required: false
+          schema:
+            type: string
+            enum: [local, internet, all]
+            default: all
+      responses:
+        '200':
+          description: List of discovered peers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveredPeersList'
+
+  /transmission/peers/{callsign}/connect:
+    post:
+      summary: Connect to discovered peer
+      description: Establish WebRTC connection to specified station
+      tags:
+        - Peer Connection
+      parameters:
+        - name: callsign
+          in: path
+          description: Target station callsign
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerConnectionRequest'
+      responses:
+        '201':
+          description: Connection established
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerConnectionStatus'
+        '400':
+          description: Invalid connection parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Peer not found or not discoverable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already connected to this peer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transmission/peers/{callsign}:
+    get:
+      summary: Get peer connection status
+      description: Retrieve status of WebRTC connection to specified station
+      tags:
+        - Peer Connection
+      parameters:
+        - name: callsign
+          in: path
+          description: Target station callsign
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      responses:
+        '200':
+          description: Peer connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeerConnectionStatus'
+        '404':
+          description: No connection to this peer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Disconnect from peer
+      description: Close WebRTC connection to specified station
+      tags:
+        - Peer Connection
+      parameters:
+        - name: callsign
+          in: path
+          description: Target station callsign
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      responses:
+        '204':
+          description: Peer disconnected successfully
+        '404':
+          description: No connection to this peer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transmission/signaling:
+    get:
+      summary: Get signaling server connection status
+      description: Check connection status to WebSocket signaling server for internet peers
+      tags:
+        - Signaling Server
+      responses:
+        '200':
+          description: Signaling server connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalingStatus'
+
+    post:
+      summary: Connect to signaling server
+      description: Establish WebSocket connection to signaling server for internet peer discovery
+      tags:
+        - Signaling Server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalingConnectionRequest'
+      responses:
+        '200':
+          description: Connected to signaling server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalingStatus'
+        '400':
+          description: Invalid signaling server parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Unable to connect to signaling server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Disconnect from signaling server
+      description: Close WebSocket connection to signaling server
+      tags:
+        - Signaling Server
+      responses:
+        '204':
+          description: Disconnected from signaling server
+        '404':
+          description: Not connected to signaling server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transmission/sync/session:
+    post:
+      summary: Start collaboration session
+      description: Create new real-time collaboration session for page building
+      tags:
+        - Collaboration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSessionRequest'
+      responses:
+        '201':
+          description: Collaboration session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncSessionStatus'
+        '400':
+          description: Invalid session parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transmission/sync/session/{sessionId}:
+    get:
+      summary: Get collaboration session status
+      description: Retrieve current status of collaboration session
+      tags:
+        - Collaboration
+      parameters:
+        - name: sessionId
+          in: path
+          description: Collaboration session ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Collaboration session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncSessionStatus'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: End collaboration session
+      description: Close collaboration session and disconnect all participants
+      tags:
+        - Collaboration
+      parameters:
+        - name: sessionId
+          in: path
+          description: Collaboration session ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Session ended successfully
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    TransmissionModeStatus:
+      type: object
+      required:
+        - mode
+        - status
+        - lastSwitchTime
+        - availableModes
+        - autoFallback
+      properties:
+        mode:
+          type: string
+          enum: [RF, WebRTC]
+          description: Current active transmission mode
+        status:
+          type: string
+          enum: [active, switching, failed, fallback]
+          description: Current connection status
+        lastSwitchTime:
+          type: string
+          format: date-time
+          description: When mode was last changed
+        performanceMetrics:
+          $ref: '#/components/schemas/PerformanceMetrics'
+        availableModes:
+          type: array
+          items:
+            type: string
+            enum: [RF, WebRTC]
+          description: List of available transmission modes
+        autoFallback:
+          type: boolean
+          description: Whether automatic fallback is enabled
+        signalingServerUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Connected signaling server URL
+
+    TransmissionModeSwitch:
+      type: object
+      required:
+        - targetMode
+      properties:
+        targetMode:
+          type: string
+          enum: [RF, WebRTC]
+          description: Desired transmission mode
+        signalingServerUrl:
+          type: string
+          format: uri
+          description: Signaling server URL for WebRTC internet mode
+        force:
+          type: boolean
+          default: false
+          description: Force switch even if current mode is working
+
+    PerformanceMetrics:
+      type: object
+      required:
+        - throughput
+        - latency
+        - packetLoss
+        - measuredAt
+      properties:
+        throughput:
+          type: number
+          minimum: 0
+          description: Current data throughput in bytes/second
+        latency:
+          type: number
+          minimum: 0
+          description: Round-trip latency in milliseconds
+        packetLoss:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Packet loss percentage
+        jitter:
+          type: number
+          minimum: 0
+          description: Jitter in milliseconds
+        measuredAt:
+          type: string
+          format: date-time
+          description: When metrics were captured
+
+    DiscoveryRequest:
+      type: object
+      properties:
+        timeoutSeconds:
+          type: integer
+          minimum: 10
+          maximum: 300
+          default: 60
+          description: Discovery scan timeout in seconds
+        includeLocal:
+          type: boolean
+          default: true
+          description: Discover peers on local network
+        includeInternet:
+          type: boolean
+          default: true
+          description: Discover peers via signaling server
+        signalingServerUrl:
+          type: string
+          format: uri
+          description: Signaling server URL for internet discovery
+
+    DiscoverySession:
+      type: object
+      required:
+        - discoveryId
+        - scanStartTime
+        - isScanning
+      properties:
+        discoveryId:
+          type: string
+          format: uuid
+          description: Unique discovery session identifier
+        scanStartTime:
+          type: string
+          format: date-time
+          description: When discovery scan started
+        isScanning:
+          type: boolean
+          description: Whether actively scanning for peers
+        signalingConnected:
+          type: boolean
+          description: Whether connected to signaling server
+
+    DiscoveredPeersList:
+      type: object
+      required:
+        - discoveryId
+        - lastLocalScan
+        - localPeers
+        - internetPeers
+      properties:
+        discoveryId:
+          type: string
+          format: uuid
+          description: Discovery session ID
+        lastLocalScan:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last local network scan completion
+        lastInternetSync:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last signaling server sync
+        localPeers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalPeer'
+        internetPeers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternetPeer'
+
+    LocalPeer:
+      type: object
+      required:
+        - callsign
+        - ipAddress
+        - port
+        - mDnsName
+        - capabilities
+        - lastSeen
+        - protocolVersion
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Station callsign
+        ipAddress:
+          type: string
+          format: ipv4
+          description: Local network IP address
+        port:
+          type: integer
+          minimum: 1024
+          maximum: 65535
+          description: WebRTC connection port
+        mDnsName:
+          type: string
+          description: Local network mDNS name (e.g., abc123.local)
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Supported features/protocols
+        signalStrength:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Network signal strength estimate (0-100)
+        lastSeen:
+          type: string
+          format: date-time
+          description: When peer was last discovered
+        certificateHash:
+          type: string
+          description: Station certificate hash for verification
+        protocolVersion:
+          type: string
+          description: HTTP-over-radio protocol version
+
+    InternetPeer:
+      type: object
+      required:
+        - callsign
+        - peerId
+        - capabilities
+        - lastSeen
+        - protocolVersion
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Station callsign
+        peerId:
+          type: string
+          format: uuid
+          description: Unique peer identifier from signaling server
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Supported features/protocols
+        lastSeen:
+          type: string
+          format: date-time
+          description: When peer was last active on signaling server
+        certificateHash:
+          type: string
+          description: Station certificate hash for verification
+        protocolVersion:
+          type: string
+          description: HTTP-over-radio protocol version
+        geolocation:
+          type: string
+          nullable: true
+          description: General geographic location
+        connectionLatency:
+          type: number
+          minimum: 0
+          description: Estimated connection latency in milliseconds
+
+    PeerConnectionRequest:
+      type: object
+      required:
+        - certificateFingerprint
+        - connectionType
+      properties:
+        certificateFingerprint:
+          type: string
+          description: Certificate fingerprint for verification
+        connectionType:
+          type: string
+          enum: [local, internet]
+          description: Type of WebRTC connection to establish
+        dataChannels:
+          type: array
+          items:
+            type: string
+          description: Required data channel names
+        priority:
+          type: string
+          enum: [low, normal, high, emergency]
+          default: normal
+          description: Connection priority level
+
+    PeerConnectionStatus:
+      type: object
+      required:
+        - callsign
+        - peerId
+        - connectionState
+        - connectedAt
+        - lastActivity
+        - connectionType
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Remote station callsign
+        peerId:
+          type: string
+          format: uuid
+          description: Unique peer identifier
+        connectionState:
+          type: string
+          enum: [new, connecting, connected, disconnected, failed, closed]
+          description: WebRTC connection state
+        iceConnectionState:
+          type: string
+          enum: [new, checking, connected, completed, failed, disconnected, closed]
+          description: ICE connection state
+        connectedAt:
+          type: string
+          format: date-time
+          description: When connection was established
+        lastActivity:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        connectionType:
+          type: string
+          enum: [local, internet]
+          description: Type of WebRTC connection
+        bandwidth:
+          $ref: '#/components/schemas/BandwidthMetrics'
+        dataChannels:
+          type: array
+          items:
+            type: string
+          description: Active data channel names
+
+    SignalingStatus:
+      type: object
+      required:
+        - connected
+        - serverUrl
+      properties:
+        connected:
+          type: boolean
+          description: Whether connected to signaling server
+        serverUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Signaling server WebSocket URL
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Current signaling session ID
+        connectedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When connection was established
+        lastPing:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last ping timestamp
+        availablePeers:
+          type: integer
+          minimum: 0
+          description: Number of peers available via signaling server
+
+    SignalingConnectionRequest:
+      type: object
+      required:
+        - serverUrl
+        - callsign
+      properties:
+        serverUrl:
+          type: string
+          format: uri
+          description: WebSocket signaling server URL
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Local station callsign
+        certificateFingerprint:
+          type: string
+          description: Local station certificate fingerprint
+
+    BandwidthMetrics:
+      type: object
+      required:
+        - bytesTransmitted
+        - bytesReceived
+        - currentRate
+      properties:
+        bytesTransmitted:
+          type: integer
+          minimum: 0
+          description: Total bytes sent
+        bytesReceived:
+          type: integer
+          minimum: 0
+          description: Total bytes received
+        currentRate:
+          type: number
+          minimum: 0
+          description: Current transmission rate in bytes/second
+        averageRate:
+          type: number
+          minimum: 0
+          description: Average transmission rate
+        peakRate:
+          type: number
+          minimum: 0
+          description: Peak transmission rate achieved
+
+    SyncSessionRequest:
+      type: object
+      required:
+        - documentId
+        - participants
+      properties:
+        documentId:
+          type: string
+          description: Document being collaboratively edited
+        participants:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+          maxItems: 10
+          description: Station callsigns to invite
+        conflictResolution:
+          type: string
+          enum: [automatic, manual]
+          default: automatic
+          description: How conflicts are handled
+        dataChannelName:
+          type: string
+          default: collaboration
+          description: WebRTC data channel name for sync
+
+    SyncSessionStatus:
+      type: object
+      required:
+        - sessionId
+        - documentId
+        - participants
+        - lastModified
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: Unique session identifier
+        documentId:
+          type: string
+          description: Document being collaboratively edited
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        lastModified:
+          type: string
+          format: date-time
+          description: Last modification timestamp
+        conflictResolution:
+          type: string
+          enum: [automatic, manual]
+          description: How conflicts are handled
+        bandwidth:
+          $ref: '#/components/schemas/BandwidthMetrics'
+
+    Participant:
+      type: object
+      required:
+        - callsign
+        - peerId
+        - joinedAt
+        - lastActivity
+        - connectionType
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Station callsign
+        peerId:
+          type: string
+          format: uuid
+          description: Associated peer connection ID
+        joinedAt:
+          type: string
+          format: date-time
+          description: When participant joined session
+        lastActivity:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        connectionType:
+          type: string
+          enum: [local, internet]
+          description: How participant is connected
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Actions participant can perform
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+
+  securitySchemes:
+    StationCertificate:
+      type: apiKey
+      in: header
+      name: X-Station-Certificate
+      description: Ham radio station certificate for authentication

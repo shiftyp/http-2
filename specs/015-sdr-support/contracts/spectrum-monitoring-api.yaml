@@ -1,0 +1,425 @@
+openapi: 3.0.3
+info:
+  title: Spectrum Monitoring API
+  description: Real-time spectrum monitoring and signal analysis API
+  version: 1.0.0
+
+paths:
+  /api/spectrum/monitoring:
+    get:
+      summary: Get active monitoring configurations
+      description: Returns all active spectrum monitoring configurations
+      responses:
+        '200':
+          description: List of monitoring configurations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitoringConfiguration'
+
+    post:
+      summary: Create monitoring configuration
+      description: Create new spectrum monitoring configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMonitoringRequest'
+      responses:
+        '201':
+          description: Monitoring configuration created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+        '400':
+          description: Invalid configuration
+
+  /api/spectrum/monitoring/{configId}:
+    parameters:
+      - name: configId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: Get monitoring configuration
+      responses:
+        '200':
+          description: Monitoring configuration details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+
+    put:
+      summary: Update monitoring configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMonitoringRequest'
+      responses:
+        '200':
+          description: Configuration updated successfully
+        '404':
+          description: Configuration not found
+
+    delete:
+      summary: Delete monitoring configuration
+      responses:
+        '204':
+          description: Configuration deleted
+        '404':
+          description: Configuration not found
+
+  /api/spectrum/data:
+    get:
+      summary: Get real-time spectrum data
+      description: Returns current spectrum analysis data for all active monitoring
+      parameters:
+        - name: deviceId
+          in: query
+          schema:
+            type: string
+          description: Filter by specific device
+        - name: frequency
+          in: query
+          schema:
+            type: number
+          description: Center frequency filter
+        - name: timeWindow
+          in: query
+          schema:
+            type: number
+            default: 60
+          description: Time window in seconds
+      responses:
+        '200':
+          description: Spectrum data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpectrumData'
+
+  /api/spectrum/signals:
+    get:
+      summary: Get detected signals
+      description: Returns currently detected signals across all monitored frequencies
+      parameters:
+        - name: signalType
+          in: query
+          schema:
+            $ref: '#/components/schemas/SignalType'
+        - name: minSnr
+          in: query
+          schema:
+            type: number
+            default: 0
+          description: Minimum SNR threshold in dB
+      responses:
+        '200':
+          description: Detected signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DetectedSignal'
+
+  /api/spectrum/waterfall/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: Get waterfall display data
+      description: Returns waterfall display configuration and recent data
+      responses:
+        '200':
+          description: Waterfall display data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterfallData'
+
+    post:
+      summary: Configure waterfall display
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaterfallConfig'
+      responses:
+        '200':
+          description: Waterfall configured successfully
+
+components:
+  schemas:
+    MonitoringConfiguration:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        frequencyRanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrequencyRange'
+        priority:
+          type: number
+          minimum: 1
+          maximum: 10
+        deviceAssignment:
+          type: string
+        bandwidthAllocation:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - enabled
+        - frequencyRanges
+        - priority
+        - deviceAssignment
+
+    CreateMonitoringRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        frequencyRanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrequencyRange'
+          minItems: 1
+        priority:
+          type: number
+          minimum: 1
+          maximum: 10
+        deviceAssignment:
+          type: string
+        bandwidthAllocation:
+          type: number
+          minimum: 1000
+      required:
+        - name
+        - frequencyRanges
+        - deviceAssignment
+
+    UpdateMonitoringRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        enabled:
+          type: boolean
+        frequencyRanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrequencyRange'
+        priority:
+          type: number
+          minimum: 1
+          maximum: 10
+
+    FrequencyRange:
+      type: object
+      properties:
+        centerFrequency:
+          type: number
+          minimum: 1000000
+          description: Center frequency in Hz
+        bandwidth:
+          type: number
+          minimum: 1000
+          description: Monitoring bandwidth in Hz
+        band:
+          $ref: '#/components/schemas/AmateurRadioBand'
+        purpose:
+          $ref: '#/components/schemas/MonitoringPurpose'
+        decodingEnabled:
+          type: boolean
+        priority:
+          type: number
+          minimum: 1
+          maximum: 10
+      required:
+        - centerFrequency
+        - bandwidth
+        - band
+        - purpose
+
+    SpectrumData:
+      type: object
+      properties:
+        deviceId:
+          type: string
+        centerFrequency:
+          type: number
+        bandwidth:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+        fftData:
+          type: array
+          items:
+            type: number
+          description: FFT magnitude data
+        signalPeaks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalPeak'
+        noiseFloor:
+          type: number
+          description: Noise floor in dB
+        averagePower:
+          type: number
+          description: Average power in dB
+      required:
+        - deviceId
+        - centerFrequency
+        - bandwidth
+        - timestamp
+        - fftData
+
+    SignalPeak:
+      type: object
+      properties:
+        frequency:
+          type: number
+        power:
+          type: number
+        bandwidth:
+          type: number
+        snr:
+          type: number
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        signalType:
+          $ref: '#/components/schemas/SignalType'
+      required:
+        - frequency
+        - power
+        - snr
+        - confidence
+
+    DetectedSignal:
+      type: object
+      properties:
+        id:
+          type: string
+        frequency:
+          type: number
+        power:
+          type: number
+        snr:
+          type: number
+        signalType:
+          $ref: '#/components/schemas/SignalType'
+        detectedAt:
+          type: string
+          format: date-time
+        duration:
+          type: number
+          description: Signal duration in seconds
+        deviceId:
+          type: string
+      required:
+        - id
+        - frequency
+        - power
+        - snr
+        - signalType
+        - detectedAt
+        - deviceId
+
+    WaterfallData:
+      type: object
+      properties:
+        deviceId:
+          type: string
+        configuration:
+          $ref: '#/components/schemas/WaterfallConfig'
+        spectrumHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              fftData:
+                type: array
+                items:
+                  type: number
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetectedSignal'
+
+    WaterfallConfig:
+      type: object
+      properties:
+        centerFrequency:
+          type: number
+        spanFrequency:
+          type: number
+        colormap:
+          type: string
+          enum: [viridis, plasma, inferno, magma, grayscale]
+        intensityRange:
+          type: object
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+        refreshRate:
+          type: number
+          minimum: 1
+          maximum: 60
+        historyDepth:
+          type: number
+          minimum: 10
+          maximum: 300
+        enabled:
+          type: boolean
+
+    AmateurRadioBand:
+      type: string
+      enum: [40M, 20M, 80M, 15M, 30M]
+
+    MonitoringPurpose:
+      type: string
+      enum: [CONTENT_DISCOVERY, EMERGENCY, MESH_COORDINATION]
+
+    SignalType:
+      type: string
+      enum: [QPSK, CW, FM, UNKNOWN]

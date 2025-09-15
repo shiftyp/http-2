@@ -1,9 +1,10 @@
 // HTTP-over-Radio Service Worker
 // Enables offline functionality and content caching
 
-const CACHE_NAME = 'http-radio-v1';
-const STATIC_CACHE = 'static-v1';
-const CONTENT_CACHE = 'content-v1';
+const CACHE_VERSION = '2.0.0';
+const STATIC_CACHE = `static-v${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `dynamic-v${CACHE_VERSION}`;
+const CONTENT_CACHE = `content-v${CACHE_VERSION}`;
 
 // Files to cache on install
 const STATIC_FILES = [
@@ -17,106 +18,180 @@ const STATIC_FILES = [
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker...');
-  
+  console.log('[SW] Installing service worker version', CACHE_VERSION);
+
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
       console.log('[SW] Caching static files');
-      return cache.addAll(STATIC_FILES);
+      return cache.addAll(STATIC_FILES).catch(err => {
+        console.warn('[SW] Some static files failed to cache:', err);
+        // Don't fail the install if some files can't be cached
+      });
     })
   );
-  
-  // Activate immediately
+
+  // Activate immediately to replace old service worker
   self.skipWaiting();
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker...');
-  
+  console.log('[SW] Activating service worker version', CACHE_VERSION);
+
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((cacheName) => {
-            return cacheName !== CACHE_NAME && 
-                   cacheName !== STATIC_CACHE && 
-                   cacheName !== CONTENT_CACHE;
-          })
-          .map((cacheName) => {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          })
-      );
-    })
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((cacheName) => {
+              // Keep current version caches
+              return !cacheName.includes(CACHE_VERSION);
+            })
+            .map((cacheName) => {
+              console.log('[SW] Deleting old cache:', cacheName);
+              return caches.delete(cacheName);
+            })
+        );
+      }),
+      // Take control of all pages immediately
+      self.clients.claim()
+    ])
   );
-  
-  // Take control of all pages immediately
-  self.clients.claim();
 });
 
-// Fetch event - serve from cache when offline
+// Fetch event - intelligent caching strategy
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  
+
   // Skip non-GET requests
   if (request.method !== 'GET') {
     return;
   }
-  
+
   // Skip chrome-extension and other non-http protocols
   if (!url.protocol.startsWith('http')) {
     return;
   }
-  
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      // Return cached response if found
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      
-      // Try to fetch from network
-      return fetch(request)
-        .then((response) => {
-          // Don't cache bad responses
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-          
-          // Clone the response
-          const responseToCache = response.clone();
-          
-          // Cache the response
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-          
-          return response;
-        })
-        .catch(() => {
-          // Network failed, return offline page if it's a navigation request
-          if (request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-          
-          // Return offline placeholder for other requests
-          return new Response('Offline - Content not available', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: new Headers({
-              'Content-Type': 'text/plain'
-            })
-          });
-        });
-    })
-  );
+
+  // Different strategies for different types of requests
+  if (isStaticAsset(url)) {
+    // Cache-first for static assets (images, fonts, etc.)
+    event.respondWith(cacheFirstStrategy(request, STATIC_CACHE));
+  } else if (isAppResource(url)) {
+    // Network-first for app resources (JS, CSS) to get updates
+    event.respondWith(networkFirstStrategy(request, DYNAMIC_CACHE));
+  } else if (isNavigationRequest(request)) {
+    // Network-first for navigation, fallback to cached index.html
+    event.respondWith(navigationStrategy(request));
+  } else {
+    // Default: network-first with cache fallback
+    event.respondWith(networkFirstStrategy(request, DYNAMIC_CACHE));
+  }
 });
+
+// Cache-first strategy for static assets
+async function cacheFirstStrategy(request, cacheName) {
+  try {
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (error) {
+    console.warn('[SW] Cache-first failed:', error);
+    return new Response('Resource not available offline', { status: 503 });
+  }
+}
+
+// Network-first strategy for app resources
+async function networkFirstStrategy(request, cacheName) {
+  try {
+    const networkResponse = await fetch(request);
+
+    if (networkResponse.ok) {
+      // Only cache successful responses
+      const cache = await caches.open(cacheName);
+      // Don't cache if it's a React dev server response with source maps
+      if (!isDevServerResponse(networkResponse)) {
+        cache.put(request, networkResponse.clone());
+      }
+    }
+
+    return networkResponse;
+  } catch (error) {
+    console.warn('[SW] Network failed, trying cache:', error);
+    const cachedResponse = await caches.match(request);
+
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    return new Response('Resource not available offline', {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+// Navigation strategy for page requests
+async function navigationStrategy(request) {
+  try {
+    // Try network first
+    const networkResponse = await fetch(request);
+    return networkResponse;
+  } catch (error) {
+    console.warn('[SW] Navigation network failed, using cached index:', error);
+    // Fallback to cached index.html
+    const cachedIndex = await caches.match('/index.html');
+    return cachedIndex || new Response('App not available offline', {
+      status: 503,
+      headers: { 'Content-Type': 'text/html' }
+    });
+  }
+}
+
+// Helper functions
+function isStaticAsset(url) {
+  return /\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i.test(url.pathname);
+}
+
+function isAppResource(url) {
+  return /\.(js|css|ts|tsx)$/i.test(url.pathname) ||
+         url.pathname.startsWith('/src/') ||
+         url.pathname.includes('/@') || // Vite dev server
+         url.pathname.includes('node_modules');
+}
+
+function isNavigationRequest(request) {
+  return request.mode === 'navigate' ||
+         (request.method === 'GET' && request.headers.get('accept').includes('text/html'));
+}
+
+function isDevServerResponse(response) {
+  // Don't cache Vite dev server responses
+  return response.headers.get('server')?.includes('vite') ||
+         response.url.includes('/@vite/') ||
+         response.url.includes('?v=') || // Vite versioning
+         response.headers.get('content-type')?.includes('application/javascript') &&
+         response.url.includes('localhost');
+}
 
 // Message event - handle messages from the app
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'CACHE_CONTENT') {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    // Skip waiting and activate immediately
+    self.skipWaiting();
+    event.ports[0]?.postMessage({ type: 'SKIP_WAITING_COMPLETE' });
+  } else if (event.data && event.data.type === 'CACHE_CONTENT') {
     // Cache content received via radio
     cacheRadioContent(event.data.payload);
   } else if (event.data && event.data.type === 'CLEAR_CACHE') {

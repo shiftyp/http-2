@@ -1,6 +1,109 @@
 import React, { forwardRef } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
-import { PageComponent, ComponentType, GridLayout } from '../../pages/PageBuilder';
+import { PageComponent, ComponentType, GridLayout, GridPosition } from '../../pages/PageBuilder';
+
+// Simple markdown to JSX renderer
+const renderMarkdownContent = (markdown: string): JSX.Element[] => {
+  const lines = markdown.split('\n');
+  const elements: JSX.Element[] = [];
+  let currentIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (!line) continue;
+
+    // Headings
+    if (line.startsWith('#')) {
+      const level = line.match(/^#+/)?.[0].length || 1;
+      const content = line.replace(/^#+\s*/, '');
+      const HeadingTag = level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3';
+      elements.push(
+        React.createElement(HeadingTag, {
+          key: `heading-${currentIndex++}`,
+          className: `font-bold mb-2 ${level === 1 ? 'text-lg' : level === 2 ? 'text-base' : 'text-sm'}`
+        }, content)
+      );
+    }
+    // Tables
+    else if (line.includes('|') && lines[i + 1]?.includes('|')) {
+      const tableLines: string[] = [];
+      let j = i;
+      while (j < lines.length && lines[j].includes('|')) {
+        const tableLine = lines[j].trim();
+        if (!tableLine.match(/^\|[\s\-\|]+\|$/)) { // Skip separator rows
+          tableLines.push(tableLine);
+        }
+        j++;
+      }
+
+      if (tableLines.length > 0) {
+        const rows = tableLines.map(row =>
+          row.split('|').map(cell => cell.trim()).filter(cell => cell)
+        );
+
+        elements.push(
+          <table key={`table-${currentIndex++}`} className="border-collapse border border-gray-600 mb-2 text-xs">
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  {row.map((cell, cellIdx) => (
+                    <td key={cellIdx} className="border border-gray-600 px-2 py-1">{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      i = j - 1;
+    }
+    // Lists
+    else if (line.startsWith('-') || line.startsWith('*')) {
+      const listItems: string[] = [];
+      let j = i;
+      while (j < lines.length && (lines[j].trim().startsWith('-') || lines[j].trim().startsWith('*'))) {
+        listItems.push(lines[j].trim().replace(/^[\-\*]\s*/, ''));
+        j++;
+      }
+
+      elements.push(
+        <ul key={`list-${currentIndex++}`} className="list-disc list-inside mb-2 space-y-1">
+          {listItems.map((item, idx) => (
+            <li key={idx} className="text-sm">{item}</li>
+          ))}
+        </ul>
+      );
+      i = j - 1;
+    }
+    // Links
+    else if (line.includes('[') && line.includes('](')) {
+      const linkMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        const [, linkText, url] = linkMatch;
+        elements.push(
+          <a key={`link-${currentIndex++}`} href={url} className="text-blue-400 hover:underline block mb-2">
+            {linkText}
+          </a>
+        );
+      }
+    }
+    // Regular paragraphs
+    else {
+      let content = line;
+      // Process bold and italic
+      content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+      elements.push(
+        <p key={`paragraph-${currentIndex++}`} className="mb-2 text-sm"
+           dangerouslySetInnerHTML={{ __html: content }} />
+      );
+    }
+  }
+
+  return elements;
+};
 
 interface GridCellProps {
   row: number;
@@ -102,6 +205,12 @@ const DraggableComponentView: React.FC<DraggableComponentProps> = ({
         );
       case ComponentType.DIVIDER:
         return <hr key={child.id} className="border-gray-600 my-2" />;
+      case ComponentType.MARKDOWN:
+        return (
+          <pre key={child.id} className="mb-2 p-2 bg-gray-800 rounded text-xs font-mono whitespace-pre-wrap">
+            {properties.content || 'Markdown content'}
+          </pre>
+        );
       default:
         return <div key={child.id} className="mb-2">{properties.content || 'Component'}</div>;
     }
@@ -209,6 +318,15 @@ const DraggableComponentView: React.FC<DraggableComponentProps> = ({
                 Container - Drop components here or add via Properties panel
               </div>
             )}
+          </div>
+        );
+      case ComponentType.MARKDOWN:
+        return (
+          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gray-900/50">
+            <div className="text-xs text-gray-400 mb-2">📑 Markdown (rendered)</div>
+            <div className="markdown-content text-sm text-white max-h-40 overflow-y-auto">
+              {renderMarkdownContent(properties.content || 'Enter markdown content...')}
+            </div>
           </div>
         );
       default:
@@ -375,9 +493,10 @@ export const GridCanvas = forwardRef<HTMLDivElement, GridCanvasProps>(
       }
     });
 
-    // Generate grid cells for visual reference
+    // Generate grid cells for visual reference based on actual column count
+    const actualColumns = gridLayout.columnSizes.length;
     for (let row = 1; row <= gridLayout.rows; row++) {
-      for (let col = 1; col <= gridLayout.columns; col++) {
+      for (let col = 1; col <= actualColumns; col++) {
         const key = `${row}-${col}`;
         gridCells.push(
           <GridCell
@@ -397,13 +516,13 @@ export const GridCanvas = forwardRef<HTMLDivElement, GridCanvasProps>(
           className="relative"
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${gridLayout.columns}, 1fr)`,
+            gridTemplateColumns: gridLayout.columnSizes.join(' '),
             gridTemplateRows: `repeat(${gridLayout.rows}, minmax(60px, auto))`,
             gap: `${gridLayout.gap}px`,
             minHeight: '600px'
           }}
           role="grid"
-          aria-label={`Design canvas with ${gridLayout.columns} columns and ${gridLayout.rows} rows`}
+          aria-label={`Design canvas with ${actualColumns} columns and ${gridLayout.rows} rows`}
           aria-describedby="grid-instructions"
         >
           {/* Grid cells for visual reference */}
@@ -423,7 +542,7 @@ export const GridCanvas = forwardRef<HTMLDivElement, GridCanvasProps>(
 
         {/* Grid info and instructions */}
         <div className="absolute top-2 right-2 text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-          {gridLayout.columns}×{gridLayout.rows} Grid
+          {actualColumns}×{gridLayout.rows} Grid
         </div>
 
         <div id="grid-instructions" className="sr-only">
