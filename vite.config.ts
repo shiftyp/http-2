@@ -1,8 +1,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Read package.json for version
+const packageJson = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
+const buildSuffix = Date.now().toString();
+const fullVersion = `${packageJson.version}-${buildSuffix}`;
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(fullVersion),
+    __BUILD_SUFFIX__: JSON.stringify(buildSuffix),
+    __SERVER_BINARY_VERSION__: JSON.stringify(`1.0.0-${buildSuffix}`)
+  },
   plugins: [
     react(),
     ...(process.env.NODE_ENV === 'production' ? [VitePWA({
@@ -14,6 +26,21 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         navigationFallback: '/index.html',
         runtimeCaching: [
+          {
+            // Cache server binaries with version-based cache names
+            urlPattern: /\/server-binaries\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: `server-binaries-v${fullVersion}`,
+              expiration: {
+                maxEntries: 5,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',

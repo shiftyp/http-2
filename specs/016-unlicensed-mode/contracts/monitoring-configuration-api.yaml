@@ -1,0 +1,685 @@
+openapi: 3.0.3
+info:
+  title: Monitoring Configuration API
+  description: API for configuring radio monitoring capabilities for unlicensed users
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /monitoring/configuration:
+    get:
+      summary: Get current monitoring configuration
+      description: Returns the current radio monitoring settings for unlicensed users
+      tags:
+        - Monitoring Configuration
+      responses:
+        '200':
+          description: Current monitoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+        '403':
+          description: Monitoring not available for licensed users in transmission mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update monitoring configuration
+      description: Updates radio monitoring settings and preferences
+      tags:
+        - Monitoring Configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringConfigurationUpdate'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringConfiguration'
+        '400':
+          description: Invalid configuration parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not authorized to modify monitoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitoring/bands:
+    get:
+      summary: Get available amateur radio bands for monitoring
+      description: Returns list of amateur radio bands available for monitoring
+      tags:
+        - Band Management
+      parameters:
+        - name: region
+          in: query
+          schema:
+            type: string
+            enum: [ITU-R1, ITU-R2, ITU-R3]
+          description: ITU region for band plan
+      responses:
+        '200':
+          description: Available amateur radio bands
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmateurRadioBands'
+
+    post:
+      summary: Add band to monitoring list
+      description: Adds an amateur radio band to the active monitoring configuration
+      tags:
+        - Band Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BandConfiguration'
+      responses:
+        '201':
+          description: Band added to monitoring
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandConfiguration'
+        '400':
+          description: Invalid band configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Band already in monitoring list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitoring/bands/{bandId}:
+    get:
+      summary: Get specific band monitoring configuration
+      description: Returns monitoring configuration for a specific amateur radio band
+      tags:
+        - Band Management
+      parameters:
+        - name: bandId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Amateur radio band identifier (e.g., '20m', '2m')
+      responses:
+        '200':
+          description: Band monitoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandConfiguration'
+        '404':
+          description: Band not found in monitoring list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update band monitoring configuration
+      description: Updates monitoring settings for a specific amateur radio band
+      tags:
+        - Band Management
+      parameters:
+        - name: bandId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Amateur radio band identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BandConfigurationUpdate'
+      responses:
+        '200':
+          description: Band configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandConfiguration'
+        '400':
+          description: Invalid configuration parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Band not found in monitoring list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Remove band from monitoring
+      description: Removes an amateur radio band from active monitoring
+      tags:
+        - Band Management
+      parameters:
+        - name: bandId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Amateur radio band identifier
+      responses:
+        '204':
+          description: Band removed from monitoring
+        '404':
+          description: Band not found in monitoring list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitoring/receivers:
+    get:
+      summary: Get available SDR receivers for monitoring
+      description: Returns list of available SDR devices that can be used for monitoring
+      tags:
+        - Receiver Management
+      responses:
+        '200':
+          description: Available SDR receivers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRReceiverList'
+
+    post:
+      summary: Configure SDR receiver for monitoring
+      description: Adds and configures an SDR receiver for radio monitoring
+      tags:
+        - Receiver Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SDRReceiverConfiguration'
+      responses:
+        '201':
+          description: SDR receiver configured successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRReceiverInfo'
+        '400':
+          description: Invalid receiver configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitoring/receivers/{receiverId}:
+    get:
+      summary: Get SDR receiver configuration
+      description: Returns configuration details for a specific SDR receiver
+      tags:
+        - Receiver Management
+      parameters:
+        - name: receiverId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: SDR receiver identifier
+      responses:
+        '200':
+          description: SDR receiver configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRReceiverInfo'
+        '404':
+          description: Receiver not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update SDR receiver configuration
+      description: Updates configuration settings for an SDR receiver
+      tags:
+        - Receiver Management
+      parameters:
+        - name: receiverId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: SDR receiver identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SDRReceiverConfigurationUpdate'
+      responses:
+        '200':
+          description: Receiver configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SDRReceiverInfo'
+        '400':
+          description: Invalid configuration parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Receiver not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    MonitoringConfiguration:
+      type: object
+      required:
+        - isEnabled
+        - monitoredBands
+        - decodingModes
+      properties:
+        isEnabled:
+          type: boolean
+          description: Whether monitoring is currently enabled
+        monitoredBands:
+          type: array
+          items:
+            $ref: '#/components/schemas/BandConfiguration'
+          description: Currently monitored amateur radio bands
+        decodingModes:
+          type: array
+          items:
+            type: string
+            enum: [QPSK, PSK31, RTTY, FT8, FT4, JS8, CW]
+          description: Supported digital modes for decoding
+        waterfallDisplay:
+          type: boolean
+          default: true
+          description: Whether to show waterfall spectrum display
+        autoDecoding:
+          type: boolean
+          default: true
+          description: Whether to automatically decode received signals
+        receiveAllTraffic:
+          type: boolean
+          default: true
+          description: Monitor all amateur traffic (per open communication standards)
+        dataLogging:
+          type: boolean
+          default: false
+          description: Whether to log decoded data for analysis
+        alertConfiguration:
+          $ref: '#/components/schemas/AlertConfiguration'
+        sdrReceivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SDRReceiverInfo'
+          description: Configured SDR receivers
+
+    MonitoringConfigurationUpdate:
+      type: object
+      properties:
+        isEnabled:
+          type: boolean
+          description: Enable or disable monitoring
+        decodingModes:
+          type: array
+          items:
+            type: string
+            enum: [QPSK, PSK31, RTTY, FT8, FT4, JS8, CW]
+          description: Digital modes to decode
+        waterfallDisplay:
+          type: boolean
+          description: Show waterfall spectrum display
+        autoDecoding:
+          type: boolean
+          description: Automatically decode received signals
+        receiveAllTraffic:
+          type: boolean
+          description: Monitor all amateur traffic
+        dataLogging:
+          type: boolean
+          description: Log decoded data for analysis
+        alertConfiguration:
+          $ref: '#/components/schemas/AlertConfiguration'
+
+    AmateurRadioBands:
+      type: object
+      required:
+        - bands
+        - region
+      properties:
+        bands:
+          type: array
+          items:
+            $ref: '#/components/schemas/AmateurBandInfo'
+          description: Available amateur radio bands
+        region:
+          type: string
+          enum: [ITU-R1, ITU-R2, ITU-R3]
+          description: ITU region for band plan
+        lastUpdated:
+          type: string
+          format: date-time
+          description: When band information was last updated
+
+    AmateurBandInfo:
+      type: object
+      required:
+        - bandId
+        - name
+        - frequencyRange
+        - privileges
+      properties:
+        bandId:
+          type: string
+          description: Band identifier (e.g., '20m', '2m')
+        name:
+          type: string
+          description: Band name
+        frequencyRange:
+          $ref: '#/components/schemas/FrequencyRange'
+        privileges:
+          type: array
+          items:
+            type: string
+          description: Allowed emission types and privileges
+        propagationCharacteristics:
+          type: string
+          description: Typical propagation behavior
+        recommendedModes:
+          type: array
+          items:
+            type: string
+          description: Common digital modes on this band
+
+    BandConfiguration:
+      type: object
+      required:
+        - bandId
+        - isEnabled
+        - frequencyRange
+      properties:
+        bandId:
+          type: string
+          description: Amateur radio band identifier
+        isEnabled:
+          type: boolean
+          description: Whether monitoring is enabled for this band
+        frequencyRange:
+          $ref: '#/components/schemas/FrequencyRange'
+        preferredModes:
+          type: array
+          items:
+            type: string
+          description: Preferred digital modes for this band
+        scanInterval:
+          type: integer
+          description: Scanning interval in milliseconds
+        signalThreshold:
+          type: number
+          description: Minimum signal strength for detection
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Monitoring priority (1=highest)
+
+    BandConfigurationUpdate:
+      type: object
+      properties:
+        isEnabled:
+          type: boolean
+          description: Enable or disable monitoring for this band
+        preferredModes:
+          type: array
+          items:
+            type: string
+          description: Preferred digital modes
+        scanInterval:
+          type: integer
+          description: Scanning interval in milliseconds
+        signalThreshold:
+          type: number
+          description: Minimum signal strength for detection
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Monitoring priority
+
+    FrequencyRange:
+      type: object
+      required:
+        - startFrequency
+        - endFrequency
+        - unit
+      properties:
+        startFrequency:
+          type: number
+          description: Starting frequency
+        endFrequency:
+          type: number
+          description: Ending frequency
+        unit:
+          type: string
+          enum: [Hz, kHz, MHz, GHz]
+          description: Frequency unit
+
+    AlertConfiguration:
+      type: object
+      properties:
+        enableAlerts:
+          type: boolean
+          default: false
+          description: Whether to enable monitoring alerts
+        alertTypes:
+          type: array
+          items:
+            type: string
+            enum: [emergency, contest, dx, beacon]
+          description: Types of alerts to monitor
+        callsignAlerts:
+          type: array
+          items:
+            type: string
+          description: Specific callsigns to alert on
+        keywordAlerts:
+          type: array
+          items:
+            type: string
+          description: Keywords to alert on in decoded text
+
+    SDRReceiverList:
+      type: object
+      required:
+        - receivers
+        - totalCount
+      properties:
+        receivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SDRReceiverInfo'
+        totalCount:
+          type: integer
+          description: Total number of available receivers
+
+    SDRReceiverInfo:
+      type: object
+      required:
+        - receiverId
+        - deviceType
+        - isConnected
+        - capabilities
+      properties:
+        receiverId:
+          type: string
+          format: uuid
+          description: Unique receiver identifier
+        deviceType:
+          type: string
+          enum: [RTL-SDR, HackRF, LimeSDR, PlutoSDR, SDRplay]
+          description: SDR device type
+        deviceName:
+          type: string
+          description: Human-readable device name
+        serialNumber:
+          type: string
+          description: Device serial number
+        isConnected:
+          type: boolean
+          description: Whether device is currently connected
+        capabilities:
+          $ref: '#/components/schemas/SDRCapabilities'
+        currentConfiguration:
+          $ref: '#/components/schemas/SDRConfiguration'
+        status:
+          type: string
+          enum: [idle, receiving, error]
+          description: Current device status
+
+    SDRReceiverConfiguration:
+      type: object
+      required:
+        - deviceType
+        - configuration
+      properties:
+        deviceType:
+          type: string
+          enum: [RTL-SDR, HackRF, LimeSDR, PlutoSDR, SDRplay]
+          description: SDR device type
+        deviceName:
+          type: string
+          description: Human-readable device name
+        serialNumber:
+          type: string
+          nullable: true
+          description: Device serial number (if known)
+        configuration:
+          $ref: '#/components/schemas/SDRConfiguration'
+
+    SDRReceiverConfigurationUpdate:
+      type: object
+      properties:
+        deviceName:
+          type: string
+          description: Human-readable device name
+        configuration:
+          $ref: '#/components/schemas/SDRConfiguration'
+
+    SDRCapabilities:
+      type: object
+      required:
+        - frequencyRange
+        - sampleRates
+        - bandwidth
+      properties:
+        frequencyRange:
+          $ref: '#/components/schemas/FrequencyRange'
+        sampleRates:
+          type: array
+          items:
+            type: integer
+          description: Supported sample rates in Hz
+        bandwidth:
+          type: number
+          description: Maximum bandwidth in Hz
+        gainRange:
+          type: object
+          properties:
+            minimum:
+              type: number
+            maximum:
+              type: number
+            step:
+              type: number
+        supportsDirectSampling:
+          type: boolean
+          description: Whether device supports direct sampling mode
+
+    SDRConfiguration:
+      type: object
+      required:
+        - centerFrequency
+        - sampleRate
+        - gain
+      properties:
+        centerFrequency:
+          type: number
+          description: Center frequency in Hz
+        sampleRate:
+          type: integer
+          description: Sample rate in Hz
+        gain:
+          type: number
+          description: RF gain setting
+        bandwidth:
+          type: number
+          description: Filter bandwidth in Hz
+        directSampling:
+          type: boolean
+          default: false
+          description: Whether to use direct sampling mode
+        agcEnabled:
+          type: boolean
+          default: false
+          description: Whether automatic gain control is enabled
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: When error occurred

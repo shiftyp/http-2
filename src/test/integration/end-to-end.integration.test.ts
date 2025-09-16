@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import './setup';
 import { AODVRouter } from '../../lib/mesh-networking';
 import { QPSKModem } from '../../lib/qpsk-modem';
 import { HTTPServer, HTTPClient } from '../../lib/ham-server';
@@ -136,6 +137,9 @@ describe('End-to-End Ham Radio HTTP Communication', () => {
   }
 
   beforeEach(async () => {
+    // Use fake timers to prevent hanging from intervals
+    vi.useFakeTimers();
+
     stations = new Map();
     radioChannel = new RadioChannel();
 
@@ -154,6 +158,14 @@ describe('End-to-End Ham Radio HTTP Communication', () => {
         disconnect: vi.fn(),
         start: vi.fn(),
         stop: vi.fn()
+      })),
+      createAnalyser: vi.fn(() => ({
+        fftSize: 2048,
+        frequencyBinCount: 1024,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        getFloatTimeDomainData: vi.fn(),
+        getByteFrequencyData: vi.fn()
       }))
     }));
 
@@ -193,7 +205,7 @@ describe('End-to-End Ham Radio HTTP Communication', () => {
       await station.database.init();
       await station.crypto.generateKeyPair(config.callsign);
       await station.server.start();
-      await station.modem.initialize();
+      // Note: QPSKModem initializes in constructor, no separate initialize() needed
 
       // Hook up modem to radio channel
       station.modem.onTransmit = async (signal: Float32Array) => {
@@ -215,10 +227,12 @@ describe('End-to-End Ham Radio HTTP Communication', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
+
     for (const station of stations.values()) {
       await station.server.stop();
-      station.modem.stop();
-      await station.crypto.close();
+      // QPSKModem doesn't have a stop method, skip this
+      // CryptoManager doesn't have close method, skip this
     }
     stations.clear();
   });
@@ -499,7 +513,7 @@ describe('End-to-End Ham Radio HTTP Communication', () => {
       // Simulate W2DEF station failure
       const w2def = stations.get('W2DEF')!;
       await w2def.server.stop();
-      w2def.modem.stop();
+      // QPSKModem doesn't have a stop method, skip this
 
       // Remove from mesh topology
       source.router.removeNeighbor(w2def.router.getAddress());

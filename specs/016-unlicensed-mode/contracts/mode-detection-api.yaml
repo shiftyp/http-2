@@ -1,0 +1,366 @@
+openapi: 3.0.3
+info:
+  title: Unlicensed Mode Detection API
+  description: API for detecting and switching between licensed and unlicensed user modes
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /user/mode:
+    get:
+      summary: Get current user mode status
+      description: Returns the current user's licensing status and available features
+      tags:
+        - User Mode
+      responses:
+        '200':
+          description: Current user mode status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserModeStatus'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Switch user mode
+      description: Change between licensed and unlicensed modes with callsign validation
+      tags:
+        - User Mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserModeSwitch'
+      responses:
+        '200':
+          description: Mode switch successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserModeStatus'
+        '400':
+          description: Invalid request or callsign format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Certificate validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/capabilities:
+    get:
+      summary: Get available features for current mode
+      description: Returns list of features available based on user's licensing status
+      tags:
+        - User Mode
+      responses:
+        '200':
+          description: Available features
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureCapabilities'
+
+  /user/rate-limit-status:
+    get:
+      summary: Get current rate limit status
+      description: Returns rate limiting information for unlicensed users
+      tags:
+        - Rate Limiting
+      responses:
+        '200':
+          description: Rate limit status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitStatus'
+        '404':
+          description: Rate limiting not applicable for licensed users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/upgrade-prompt:
+    post:
+      summary: Request upgrade to licensed mode
+      description: Initiates the process for unlicensed users to upgrade to licensed mode
+      tags:
+        - User Mode
+      responses:
+        '200':
+          description: Upgrade process initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpgradePrompt'
+        '409':
+          description: User already in licensed mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    UserModeStatus:
+      type: object
+      required:
+        - status
+        - sessionId
+        - capabilities
+        - modeSetAt
+      properties:
+        status:
+          type: string
+          enum: [licensed, unlicensed]
+          description: Current user licensing status
+        callsign:
+          type: string
+          nullable: true
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign (null for unlicensed users)
+        certificateId:
+          type: string
+          nullable: true
+          format: uuid
+          description: Associated certificate ID for validation
+        sessionId:
+          type: string
+          format: uuid
+          description: Unique session identifier
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureCapability'
+          description: Available features based on licensing status
+        modeSetAt:
+          type: string
+          format: date-time
+          description: When current mode was established
+        lastVerification:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last certificate verification timestamp
+        persistAcrossSessions:
+          type: boolean
+          description: Whether to remember license status
+        rateLimitState:
+          $ref: '#/components/schemas/RateLimitState'
+          nullable: true
+          description: Rate limiting state for unlicensed users
+
+    UserModeSwitch:
+      type: object
+      required:
+        - targetMode
+      properties:
+        targetMode:
+          type: string
+          enum: [licensed, unlicensed]
+          description: Desired user mode
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Callsign for licensed mode (required when switching to licensed)
+        certificateData:
+          type: string
+          description: Base64-encoded certificate for validation
+        persistAcrossSessions:
+          type: boolean
+          default: true
+          description: Whether to remember this mode setting
+
+    FeatureCapability:
+      type: object
+      required:
+        - feature
+        - enabled
+        - requiresCertificate
+      properties:
+        feature:
+          type: string
+          description: Feature name
+          example: radio_transmission
+        enabled:
+          type: boolean
+          description: Whether feature is available
+        restrictions:
+          type: array
+          items:
+            type: string
+          description: Any restrictions on feature usage
+        requiresCertificate:
+          type: boolean
+          description: Whether valid certificate required
+
+    FeatureCapabilities:
+      type: object
+      required:
+        - features
+        - userMode
+      properties:
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureCapability'
+        userMode:
+          type: string
+          enum: [licensed, unlicensed]
+        restrictionSummary:
+          type: string
+          description: Human-readable summary of restrictions
+
+    RateLimitState:
+      type: object
+      required:
+        - requestsPerMinute
+        - requestsPerHour
+        - requestsPerDay
+        - lastRequestTime
+      properties:
+        userId:
+          type: string
+          description: User identifier
+        requestsPerMinute:
+          type: integer
+          minimum: 0
+          description: Current requests per minute count
+        requestsPerHour:
+          type: integer
+          minimum: 0
+          description: Current requests per hour count
+        requestsPerDay:
+          type: integer
+          minimum: 0
+          description: Current requests per day count
+        lastRequestTime:
+          type: string
+          format: date-time
+          description: Timestamp of last request
+        consecutiveViolations:
+          type: integer
+          minimum: 0
+          description: Number of consecutive rate limit violations
+        temporaryBanUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Temporary ban expiration
+        warningsSent:
+          type: integer
+          minimum: 0
+          description: Number of rate limit warnings sent
+
+    RateLimitStatus:
+      type: object
+      required:
+        - currentLimits
+        - usage
+        - status
+      properties:
+        currentLimits:
+          type: object
+          properties:
+            requestsPerMinute:
+              type: integer
+              example: 30
+            requestsPerHour:
+              type: integer
+              example: 500
+            requestsPerDay:
+              type: integer
+              example: 2000
+        usage:
+          $ref: '#/components/schemas/RateLimitState'
+        status:
+          type: string
+          enum: [ok, warning, limited, banned]
+          description: Current rate limit status
+        resetTimes:
+          type: object
+          properties:
+            nextMinuteReset:
+              type: string
+              format: date-time
+            nextHourReset:
+              type: string
+              format: date-time
+            nextDayReset:
+              type: string
+              format: date-time
+
+    UpgradePrompt:
+      type: object
+      required:
+        - message
+        - steps
+        - benefits
+      properties:
+        message:
+          type: string
+          description: Educational message about licensing benefits
+        steps:
+          type: array
+          items:
+            type: string
+          description: Steps to obtain amateur radio license
+        benefits:
+          type: array
+          items:
+            type: string
+          description: Benefits of licensed mode
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              url:
+                type: string
+                format: uri
+          description: Educational resources about amateur radio licensing
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: When error occurred

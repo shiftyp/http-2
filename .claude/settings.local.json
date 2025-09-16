@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest run:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(npm test:*)",
+      "Bash(node:*)",
+      "Bash(.specify/scripts/check-task-prerequisites.sh:*)",
+      "Bash(npm run test:integration:*)",
+      "Bash(npm run test:*)",
+      "WebSearch",
+      "Bash(npm install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

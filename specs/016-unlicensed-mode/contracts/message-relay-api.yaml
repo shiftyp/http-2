@@ -1,0 +1,634 @@
+openapi: 3.0.3
+info:
+  title: Message Relay API
+  description: API for managing message routing through licensed stations for unlicensed users
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /relay/stations:
+    get:
+      summary: Get available relay stations
+      description: Returns list of licensed stations available for message relay
+      tags:
+        - Relay Discovery
+      parameters:
+        - name: protocol
+          in: query
+          schema:
+            type: string
+            enum: [WebRTC, WebSocket, HTTP]
+          description: Filter by supported protocol
+        - name: max_load
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Maximum current load percentage
+        - name: geographic_area
+          in: query
+          schema:
+            type: string
+          description: Geographic area preference
+      responses:
+        '200':
+          description: Available relay stations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayStationList'
+        '503':
+          description: No relay stations available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /relay/stations/{callsign}:
+    get:
+      summary: Get specific relay station information
+      description: Returns detailed information about a specific relay station
+      tags:
+        - Relay Discovery
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Relay station callsign
+      responses:
+        '200':
+          description: Relay station information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayStationInfo'
+        '404':
+          description: Relay station not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /relay/paths:
+    post:
+      summary: Create a relay path
+      description: Establishes a message relay path through licensed stations
+      tags:
+        - Path Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelayPathRequest'
+      responses:
+        '201':
+          description: Relay path created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayPathInfo'
+        '400':
+          description: Invalid path request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: User not authorized for relay service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Relay stations unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: List active relay paths
+      description: Returns list of active relay paths for the current user
+      tags:
+        - Path Management
+      responses:
+        '200':
+          description: Active relay paths
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayPathList'
+
+  /relay/paths/{pathId}:
+    get:
+      summary: Get relay path information
+      description: Returns detailed information about a specific relay path
+      tags:
+        - Path Management
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Relay path identifier
+      responses:
+        '200':
+          description: Relay path information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayPathInfo'
+        '404':
+          description: Relay path not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Close relay path
+      description: Terminates an active relay path
+      tags:
+        - Path Management
+      parameters:
+        - name: pathId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Relay path identifier
+      responses:
+        '204':
+          description: Relay path closed successfully
+        '404':
+          description: Relay path not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /relay/messages:
+    post:
+      summary: Send message via relay
+      description: Sends a message through an established relay path
+      tags:
+        - Message Relay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelayMessageRequest'
+      responses:
+        '202':
+          description: Message queued for relay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayMessageResponse'
+        '400':
+          description: Invalid message format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Relay path not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Message too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /relay/messages/{messageId}/status:
+    get:
+      summary: Get message relay status
+      description: Returns delivery status of a relayed message
+      tags:
+        - Message Relay
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Message identifier
+      responses:
+        '200':
+          description: Message status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageStatus'
+        '404':
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    RelayStationList:
+      type: object
+      required:
+        - stations
+        - totalCount
+      properties:
+        stations:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelayStationSummary'
+        totalCount:
+          type: integer
+          description: Total number of available stations
+        lastUpdated:
+          type: string
+          format: date-time
+          description: When list was last updated
+
+    RelayStationSummary:
+      type: object
+      required:
+        - callsign
+        - capabilities
+        - currentLoad
+        - uptimePercentage
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Supported protocols and features
+        currentLoad:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Current load percentage
+        uptimePercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Uptime reliability percentage
+        averageResponseTime:
+          type: integer
+          description: Average response time in milliseconds
+        geographicLocation:
+          type: string
+          nullable: true
+          description: General geographic location
+
+    RelayStationInfo:
+      type: object
+      required:
+        - callsign
+        - stationId
+        - capabilities
+        - relayPolicy
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign
+        stationId:
+          type: string
+          format: uuid
+          description: Unique station identifier
+        certificateId:
+          type: string
+          format: uuid
+          description: Valid certificate for verification
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelayCapability'
+          description: Supported relay capabilities
+        relayPolicy:
+          $ref: '#/components/schemas/RelayPolicy'
+        currentLoad:
+          type: integer
+          minimum: 0
+          description: Current number of active relays
+        maxRelayLoad:
+          type: integer
+          minimum: 1
+          description: Maximum concurrent relay connections
+        uptimePercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Uptime reliability over 30 days
+        averageResponseTime:
+          type: integer
+          description: Average response time in milliseconds
+        totalMessagesRelayed:
+          type: integer
+          minimum: 0
+          description: Lifetime message relay count
+        lastActivity:
+          type: string
+          format: date-time
+          description: Last relay activity timestamp
+
+    RelayCapability:
+      type: object
+      required:
+        - protocol
+        - maxBandwidth
+        - qosLevel
+      properties:
+        protocol:
+          type: string
+          enum: [WebRTC, WebSocket, HTTP]
+          description: Supported protocol
+        maxBandwidth:
+          type: integer
+          description: Maximum bandwidth in bytes/second
+        qosLevel:
+          type: string
+          enum: [best-effort, guaranteed, priority]
+          description: Quality of service level
+        encryptionSupport:
+          type: boolean
+          description: Whether message signing is supported
+
+    RelayPolicy:
+      type: object
+      required:
+        - acceptAnonymous
+        - maxSessionDuration
+      properties:
+        acceptAnonymous:
+          type: boolean
+          description: Accept unlicensed user relays
+        maxSessionDuration:
+          type: integer
+          description: Maximum relay session time in minutes
+        contentFiltering:
+          type: boolean
+          description: Whether content filtering is enabled
+        emergencyOverride:
+          type: boolean
+          description: Allow emergency traffic override
+        bandwidthLimit:
+          type: integer
+          description: Per-user bandwidth limit in bytes/second
+
+    RelayPathRequest:
+      type: object
+      required:
+        - destinationUserId
+        - pathType
+      properties:
+        destinationUserId:
+          type: string
+          description: Target recipient identifier
+        pathType:
+          type: string
+          enum: [internet, hybrid, emergency]
+          description: Type of relay path
+        preferredStations:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Preferred relay station callsigns
+        maxLatency:
+          type: integer
+          description: Maximum acceptable latency in milliseconds
+        reliabilityRequirement:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Minimum reliability score required
+
+    RelayPathInfo:
+      type: object
+      required:
+        - pathId
+        - originUserId
+        - destinationUserId
+        - relayStations
+        - pathStatus
+      properties:
+        pathId:
+          type: string
+          format: uuid
+          description: Unique path identifier
+        originUserId:
+          type: string
+          description: Original sender identifier
+        destinationUserId:
+          type: string
+          description: Final recipient identifier
+        relayStations:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Licensed stations in relay chain
+        pathEstablishedAt:
+          type: string
+          format: date-time
+          description: When relay path was created
+        lastUsed:
+          type: string
+          format: date-time
+          description: Last message transmission via this path
+        messageCount:
+          type: integer
+          minimum: 0
+          description: Number of messages relayed via this path
+        totalBytesRelayed:
+          type: integer
+          minimum: 0
+          description: Total data relayed through path
+        pathStatus:
+          type: string
+          enum: [active, degraded, failed, expired]
+          description: Current path status
+        averageLatency:
+          type: integer
+          description: Average message latency in milliseconds
+        reliabilityScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Path reliability score
+        pathType:
+          type: string
+          enum: [internet, hybrid, emergency]
+          description: Type of relay path
+
+    RelayPathList:
+      type: object
+      required:
+        - paths
+        - totalCount
+      properties:
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelayPathInfo'
+        totalCount:
+          type: integer
+          description: Total number of active paths
+
+    RelayMessageRequest:
+      type: object
+      required:
+        - pathId
+        - messageContent
+        - contentType
+      properties:
+        pathId:
+          type: string
+          format: uuid
+          description: Relay path to use
+        messageContent:
+          type: string
+          description: Message content (Base64 encoded for binary)
+        contentType:
+          type: string
+          description: MIME type of message content
+        priority:
+          type: string
+          enum: [normal, high, emergency]
+          default: normal
+          description: Message priority level
+        encryptionStatus:
+          type: string
+          enum: [signed, plain]
+          default: plain
+          description: FCC-compliant signing status
+        maxRetries:
+          type: integer
+          minimum: 0
+          maximum: 3
+          default: 1
+          description: Maximum retry attempts
+
+    RelayMessageResponse:
+      type: object
+      required:
+        - messageId
+        - status
+        - queuedAt
+      properties:
+        messageId:
+          type: string
+          format: uuid
+          description: Unique message identifier
+        status:
+          type: string
+          enum: [queued, transmitting, delivered, failed]
+          description: Current message status
+        queuedAt:
+          type: string
+          format: date-time
+          description: When message was queued
+        estimatedDelivery:
+          type: string
+          format: date-time
+          nullable: true
+          description: Estimated delivery time
+        pathUsed:
+          type: string
+          format: uuid
+          description: Relay path used for message
+
+    MessageStatus:
+      type: object
+      required:
+        - messageId
+        - status
+        - queuedAt
+      properties:
+        messageId:
+          type: string
+          format: uuid
+          description: Message identifier
+        status:
+          type: string
+          enum: [queued, transmitting, delivered, failed, expired]
+          description: Current delivery status
+        queuedAt:
+          type: string
+          format: date-time
+          description: When message was queued
+        transmittedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When transmission started
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When message was delivered
+        failureReason:
+          type: string
+          nullable: true
+          description: Reason for delivery failure
+        retryCount:
+          type: integer
+          minimum: 0
+          description: Number of retry attempts made
+        pathUsed:
+          type: string
+          format: uuid
+          description: Relay path used for message
+        totalLatency:
+          type: integer
+          nullable: true
+          description: Total delivery time in milliseconds
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: When error occurred

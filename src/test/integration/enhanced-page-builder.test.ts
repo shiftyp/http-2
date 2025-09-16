@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Enhanced Page Builder User Workflows
  * Validates complete user scenarios from quickstart guide
  * Requirements: All functional requirements (FR-001 through FR-013)

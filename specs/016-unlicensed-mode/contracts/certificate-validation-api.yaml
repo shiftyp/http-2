@@ -1,0 +1,456 @@
+openapi: 3.0.3
+info:
+  title: Certificate Validation API
+  description: API for validating amateur radio callsign certificates and managing certificate database
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /certificates/validate:
+    post:
+      summary: Validate a callsign certificate
+      description: Validates a certificate against known certificate authorities and checks revocation status
+      tags:
+        - Certificate Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateValidationRequest'
+      responses:
+        '200':
+          description: Certificate validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateValidationResponse'
+        '400':
+          description: Invalid certificate format or data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many validation attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/{callsign}:
+    get:
+      summary: Get certificate information for callsign
+      description: Retrieves cached certificate information for a specific callsign
+      tags:
+        - Certificate Management
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign
+      responses:
+        '200':
+          description: Certificate information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateInfo'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/{callsign}/status:
+    get:
+      summary: Get current certificate status
+      description: Returns current validation status without triggering new validation
+      tags:
+        - Certificate Management
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign
+      responses:
+        '200':
+          description: Certificate status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateStatus'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/register:
+    post:
+      summary: Register a new certificate
+      description: Register a certificate for a callsign with validation
+      tags:
+        - Certificate Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRegistration'
+      responses:
+        '201':
+          description: Certificate registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateInfo'
+        '400':
+          description: Invalid certificate data or format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Certificate already exists for callsign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/verify-chain:
+    post:
+      summary: Verify certificate chain
+      description: Validates a certificate chain including issuer certificates
+      tags:
+        - Certificate Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateChainRequest'
+      responses:
+        '200':
+          description: Certificate chain validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateChainResponse'
+        '400':
+          description: Invalid certificate chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/special-events:
+    get:
+      summary: List special event certificates
+      description: Returns list of special event and club station certificates
+      tags:
+        - Certificate Management
+      parameters:
+        - name: active_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Return only currently active certificates
+      responses:
+        '200':
+          description: Special event certificates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecialEventCertificates'
+
+components:
+  schemas:
+    CertificateValidationRequest:
+      type: object
+      required:
+        - callsign
+        - certificateData
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign to validate
+        certificateData:
+          type: string
+          description: Base64-encoded certificate content
+        skipCache:
+          type: boolean
+          default: false
+          description: Skip cached validation results
+        includeAlternateCallsigns:
+          type: boolean
+          default: false
+          description: Include validation for alternate callsigns
+
+    CertificateValidationResponse:
+      type: object
+      required:
+        - isValid
+        - callsign
+        - validationTimestamp
+      properties:
+        isValid:
+          type: boolean
+          description: Whether certificate is valid
+        callsign:
+          type: string
+          description: Validated callsign
+        certificateId:
+          type: string
+          format: uuid
+          description: Unique certificate identifier
+        fingerprint:
+          type: string
+          description: SHA-256 hash of certificate
+        verificationStatus:
+          type: string
+          enum: [valid, expired, revoked, invalid]
+          description: Detailed validation status
+        validationTimestamp:
+          type: string
+          format: date-time
+          description: When validation was performed
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Certificate expiration date
+        issuer:
+          type: string
+          description: Certificate issuer
+        alternateCallsigns:
+          type: array
+          items:
+            type: string
+          description: Additional callsigns covered by certificate
+        validationErrors:
+          type: array
+          items:
+            type: string
+          description: Validation error messages (if any)
+
+    CertificateInfo:
+      type: object
+      required:
+        - certificateId
+        - callsign
+        - fingerprint
+        - verificationStatus
+      properties:
+        certificateId:
+          type: string
+          format: uuid
+          description: Unique certificate identifier
+        callsign:
+          type: string
+          description: Associated amateur radio callsign
+        issuer:
+          type: string
+          description: Certificate authority or issuer
+        issuedAt:
+          type: string
+          format: date-time
+          description: Certificate issuance timestamp
+        expiresAt:
+          type: string
+          format: date-time
+          description: Certificate expiration timestamp
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Revocation timestamp
+        fingerprint:
+          type: string
+          description: SHA-256 hash of certificate
+        verificationStatus:
+          type: string
+          enum: [valid, expired, revoked, invalid]
+          description: Current validation status
+        lastVerified:
+          type: string
+          format: date-time
+          description: Last successful verification
+        alternateCallsigns:
+          type: array
+          items:
+            type: string
+          description: Special event or club callsigns covered
+
+    CertificateStatus:
+      type: object
+      required:
+        - callsign
+        - status
+        - lastChecked
+      properties:
+        callsign:
+          type: string
+          description: Amateur radio callsign
+        status:
+          type: string
+          enum: [valid, expired, revoked, invalid, unknown]
+          description: Current certificate status
+        lastChecked:
+          type: string
+          format: date-time
+          description: When status was last checked
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Certificate expiration date
+        nextCheckDue:
+          type: string
+          format: date-time
+          description: When status should be rechecked
+        verificationAttempts:
+          type: integer
+          description: Number of recent verification attempts
+
+    CertificateRegistration:
+      type: object
+      required:
+        - callsign
+        - certificateData
+        - issuer
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Amateur radio callsign
+        certificateData:
+          type: string
+          description: Base64-encoded certificate content
+        issuer:
+          type: string
+          description: Certificate issuer name
+        alternateCallsigns:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Additional callsigns covered
+        issuerCertificateId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent certificate for chain validation
+
+    CertificateChainRequest:
+      type: object
+      required:
+        - certificateChain
+      properties:
+        certificateChain:
+          type: array
+          items:
+            type: string
+          description: Array of Base64-encoded certificates (leaf to root)
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Callsign being validated
+
+    CertificateChainResponse:
+      type: object
+      required:
+        - isValid
+        - chainLength
+        - validationResults
+      properties:
+        isValid:
+          type: boolean
+          description: Whether entire chain is valid
+        chainLength:
+          type: integer
+          description: Number of certificates in chain
+        validationResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/CertificateValidationResponse'
+          description: Validation result for each certificate
+        trustAnchor:
+          type: string
+          description: Root certificate identifier
+        validationErrors:
+          type: array
+          items:
+            type: string
+          description: Chain validation errors
+
+    SpecialEventCertificates:
+      type: object
+      required:
+        - certificates
+        - totalCount
+      properties:
+        certificates:
+          type: array
+          items:
+            type: object
+            properties:
+              callsign:
+                type: string
+              certificateId:
+                type: string
+                format: uuid
+              eventName:
+                type: string
+              validFrom:
+                type: string
+                format: date-time
+              validUntil:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: [active, expired, pending]
+        totalCount:
+          type: integer
+          description: Total number of special event certificates
+        lastUpdated:
+          type: string
+          format: date-time
+          description: When list was last updated
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: When error occurred

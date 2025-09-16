@@ -220,3 +220,4 @@ curl http://localhost:8080/health
 ---
 *Context for AI assistance - Version 4.0 - Updated 2025-09-15*
 *Focus: Hybrid transmission modes with BitTorrent and WebRTC protocols*
+- when fixing tests, always prefer to align implementation with spects to make tests pass. Modify tests only when they don't align with specs, and don't simplify or shortcut implementations to make them pass tests

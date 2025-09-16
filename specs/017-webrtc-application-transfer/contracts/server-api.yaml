@@ -1,0 +1,482 @@
+openapi: 3.0.0
+info:
+  title: Distributed Server API
+  version: 1.0.0
+  description: HTTP API for distributed ham radio servers
+
+servers:
+  - url: http://localhost:8080
+    description: Local server instance
+
+paths:
+  /api/status:
+    get:
+      summary: Get server status
+      description: Returns current server state and configuration
+      responses:
+        '200':
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerStatus'
+
+  /api/claim-station:
+    post:
+      summary: Claim unclaimed server
+      description: First licensed operator claims server ownership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: Server claimed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '403':
+          description: Server already claimed
+        '400':
+          description: Invalid certificate
+
+  /api/info:
+    get:
+      summary: Get server information
+      description: Returns server capabilities and metadata for discovery
+      responses:
+        '200':
+          description: Server information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfo'
+
+  /api/certificates:
+    get:
+      summary: List trusted certificates
+      description: Returns all certificates in trust store
+      responses:
+        '200':
+          description: Certificate list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CertificateSummary'
+
+    post:
+      summary: Add certificate to trust store
+      description: Add a new certificate with chain validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateSubmission'
+      responses:
+        '201':
+          description: Certificate added
+        '400':
+          description: Invalid certificate or chain
+
+  /api/certificates/{fingerprint}:
+    get:
+      summary: Get certificate details
+      description: Returns full certificate with chain
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '404':
+          description: Certificate not found
+
+  /api/certificates/{fingerprint}/blacklist:
+    post:
+      summary: Blacklist a certificate
+      description: Add certificate to local blacklist
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Certificate blacklisted
+        '404':
+          description: Certificate not found
+
+  /api/issue-certificate:
+    post:
+      summary: Issue new certificate (CA only)
+      description: Issue certificate for another operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRequest'
+      responses:
+        '201':
+          description: Certificate issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedCertificate'
+        '403':
+          description: Not authorized to issue certificates
+        '400':
+          description: Invalid request
+
+  /api/peers:
+    get:
+      summary: List known peer servers
+      description: Returns discovered and configured peer servers
+      responses:
+        '200':
+          description: Peer list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeerServer'
+
+    post:
+      summary: Add peer server
+      description: Manually add a peer for coordination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeerRegistration'
+      responses:
+        '201':
+          description: Peer added
+        '400':
+          description: Invalid peer information
+
+  /api/content-catalog:
+    get:
+      summary: Get content catalog
+      description: List all content available on this server
+      responses:
+        '200':
+          description: Content catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentCatalog'
+
+  /api/local-servers:
+    get:
+      summary: Get local network servers
+      description: Returns other servers discovered on local network
+      responses:
+        '200':
+          description: Local server list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiscoveredServer'
+
+  /ws/signal:
+    get:
+      summary: WebSocket signaling endpoint
+      description: WebRTC signaling relay via WebSocket
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+  /ws/coordinate:
+    get:
+      summary: Server coordination endpoint
+      description: Server-to-server coordination via WebSocket
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+components:
+  schemas:
+    ServerStatus:
+      type: object
+      required:
+        - state
+        - version
+      properties:
+        state:
+          type: string
+          enum: [unclaimed, claimed, active]
+        owner:
+          type: string
+          description: Callsign of server owner
+        version:
+          type: string
+          description: Server version with build suffix
+        endpoint:
+          type: string
+          description: Public endpoint URL
+        signaling:
+          type: object
+          properties:
+            url:
+              type: string
+            connected:
+              type: integer
+        uptime:
+          type: integer
+          description: Uptime in seconds
+
+    ServerInfo:
+      type: object
+      required:
+        - type
+        - version
+        - capabilities
+      properties:
+        type:
+          type: string
+          enum: [signaling, server]
+        version:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [signaling, webrtc, ca, mesh, cache]
+        callsign:
+          type: string
+        signalingUrl:
+          type: string
+
+    ClaimRequest:
+      type: object
+      required:
+        - certificate
+        - station
+      properties:
+        certificate:
+          type: string
+          description: PEM encoded certificate
+        station:
+          type: object
+          properties:
+            callsign:
+              type: string
+            metadata:
+              type: object
+
+    ClaimResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        owner:
+          type: string
+        signalingUrl:
+          type: string
+        accessToken:
+          type: string
+
+    Certificate:
+      type: object
+      required:
+        - fingerprint
+        - certificate
+      properties:
+        fingerprint:
+          type: string
+        serialNumber:
+          type: string
+        subject:
+          type: object
+          properties:
+            commonName:
+              type: string
+            organization:
+              type: string
+            country:
+              type: string
+        issuer:
+          type: object
+          properties:
+            commonName:
+              type: string
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        extensions:
+          type: object
+          properties:
+            callsign:
+              type: string
+            licenseClass:
+              type: string
+              enum: [Technician, General, Extra]
+            canIssue:
+              type: boolean
+            issuerChain:
+              type: array
+              items:
+                type: string
+        chain:
+          type: array
+          items:
+            type: string
+            description: PEM certificates
+
+    CertificateSummary:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+        callsign:
+          type: string
+        licenseClass:
+          type: string
+        trustLevel:
+          type: string
+          enum: [root, intermediate, peer]
+
+    CertificateSubmission:
+      type: object
+      required:
+        - certificate
+      properties:
+        certificate:
+          type: string
+          description: PEM encoded certificate
+        chain:
+          type: array
+          items:
+            type: string
+        trustLevel:
+          type: string
+          enum: [intermediate, peer]
+
+    CertificateRequest:
+      type: object
+      required:
+        - csr
+        - proofOfLicense
+      properties:
+        csr:
+          type: string
+          description: Certificate signing request
+        proofOfLicense:
+          type: object
+          description: Proof of amateur license
+
+    IssuedCertificate:
+      type: object
+      properties:
+        certificate:
+          type: string
+        chain:
+          type: array
+          items:
+            type: string
+
+    PeerServer:
+      type: object
+      properties:
+        endpoint:
+          type: string
+        callsign:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        lastContact:
+          type: string
+          format: date-time
+        discoveryMethod:
+          type: string
+          enum: [mdns, manual, cq, peer]
+
+    PeerRegistration:
+      type: object
+      required:
+        - endpoint
+      properties:
+        endpoint:
+          type: string
+        callsign:
+          type: string
+
+    ContentCatalog:
+      type: object
+      properties:
+        serverId:
+          type: string
+        callsign:
+          type: string
+        lastUpdated:
+          type: string
+          format: date-time
+        totalSize:
+          type: integer
+        entryCount:
+          type: integer
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              hash:
+                type: string
+              size:
+                type: integer
+              contentType:
+                type: string
+              priority:
+                type: integer
+
+    DiscoveredServer:
+      type: object
+      properties:
+        callsign:
+          type: string
+        endpoint:
+          type: string
+        signalingUrl:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string

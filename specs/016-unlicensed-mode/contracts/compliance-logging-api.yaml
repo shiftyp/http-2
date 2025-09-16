@@ -1,0 +1,729 @@
+openapi: 3.0.3
+info:
+  title: Compliance Logging API
+  description: API for managing regulatory compliance logs and audit trails for amateur radio operations
+  version: 1.0.0
+  contact:
+    name: Ham Radio HTTP Project
+    url: https://github.com/your-org/http-2
+
+servers:
+  - url: http://callsign.radio/api/v1
+    description: Ham radio station API endpoint
+
+paths:
+  /compliance/logs:
+    get:
+      summary: Get compliance log entries
+      description: Returns compliance log entries with filtering and pagination
+      tags:
+        - Compliance Logging
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start date for log entries
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date for log entries
+        - name: eventType
+          in: query
+          schema:
+            type: string
+            enum: [mode_switch, message_relay, certificate_validation, rate_limit_violation, protocol_switch, emergency_override, transmission_attempt, monitoring_activity]
+          description: Filter by event type
+        - name: userMode
+          in: query
+          schema:
+            type: string
+            enum: [licensed, unlicensed]
+          description: Filter by user mode
+        - name: complianceStatus
+          in: query
+          schema:
+            type: string
+            enum: [compliant, warning, violation]
+          description: Filter by compliance status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Maximum number of entries to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of entries to skip
+      responses:
+        '200':
+          description: Compliance log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceLogResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create compliance log entry
+      description: Creates a new compliance log entry for regulatory tracking
+      tags:
+        - Compliance Logging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceLogEntry'
+      responses:
+        '201':
+          description: Compliance log entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceLogEntry'
+        '400':
+          description: Invalid log entry data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /compliance/logs/{logId}:
+    get:
+      summary: Get specific compliance log entry
+      description: Returns details of a specific compliance log entry
+      tags:
+        - Compliance Logging
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Compliance log entry identifier
+      responses:
+        '200':
+          description: Compliance log entry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceLogEntry'
+        '404':
+          description: Log entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /compliance/reports/summary:
+    get:
+      summary: Get compliance summary report
+      description: Returns summarized compliance metrics for a date range
+      tags:
+        - Compliance Reporting
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Start date for report
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: End date for report
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+          description: How to group the summary data
+      responses:
+        '200':
+          description: Compliance summary report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSummaryReport'
+        '400':
+          description: Invalid date range or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /compliance/reports/violations:
+    get:
+      summary: Get compliance violations report
+      description: Returns detailed report of compliance violations and warnings
+      tags:
+        - Compliance Reporting
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start date for violations report
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date for violations report
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [warning, violation]
+          description: Filter by violation severity
+      responses:
+        '200':
+          description: Compliance violations report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceViolationsReport'
+
+  /compliance/export:
+    post:
+      summary: Export compliance logs
+      description: Exports compliance logs in various formats for regulatory submission
+      tags:
+        - Data Export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceExportRequest'
+      responses:
+        '200':
+          description: Compliance data export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceExportResponse'
+            text/csv:
+              schema:
+                type: string
+                description: CSV format compliance data
+            application/xml:
+              schema:
+                type: string
+                description: XML format compliance data (ADIF compatible)
+        '400':
+          description: Invalid export parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /compliance/flags:
+    get:
+      summary: Get active compliance flags
+      description: Returns currently active compliance monitoring flags
+      tags:
+        - Compliance Monitoring
+      responses:
+        '200':
+          description: Active compliance flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceFlagsList'
+
+    post:
+      summary: Create compliance flag
+      description: Creates a new compliance monitoring flag
+      tags:
+        - Compliance Monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceFlagRequest'
+      responses:
+        '201':
+          description: Compliance flag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceFlag'
+        '400':
+          description: Invalid flag data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /compliance/flags/{flagId}:
+    delete:
+      summary: Remove compliance flag
+      description: Removes an active compliance flag
+      tags:
+        - Compliance Monitoring
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Compliance flag identifier
+      responses:
+        '204':
+          description: Compliance flag removed
+        '404':
+          description: Flag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    ComplianceLogResponse:
+      type: object
+      required:
+        - entries
+        - totalCount
+        - pagination
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceLogEntry'
+        totalCount:
+          type: integer
+          description: Total number of matching entries
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    ComplianceLogEntry:
+      type: object
+      required:
+        - logId
+        - timestamp
+        - userId
+        - userMode
+        - eventType
+        - complianceStatus
+      properties:
+        logId:
+          type: string
+          format: uuid
+          description: Unique log entry identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: When event occurred (UTC)
+        userId:
+          type: string
+          description: User identifier (session-based for unlicensed)
+        userMode:
+          type: string
+          enum: [licensed, unlicensed]
+          description: User mode at time of event
+        eventType:
+          type: string
+          enum: [mode_switch, message_relay, certificate_validation, rate_limit_violation, protocol_switch, emergency_override, transmission_attempt, monitoring_activity]
+          description: Type of compliance event
+        eventData:
+          type: object
+          description: Event-specific data (JSON format)
+        protocolUsed:
+          type: string
+          enum: [RF, WebRTC, WebSocket, HTTP]
+          description: Communication protocol used
+        callsignInvolved:
+          type: string
+          nullable: true
+          pattern: '^[A-Z0-9]{3,8}$'
+          description: Associated callsign (if any)
+        relayStations:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z0-9]{3,8}$'
+          description: Relay stations involved (if applicable)
+        dataSize:
+          type: integer
+          minimum: 0
+          description: Size of data transmitted/received in bytes
+        ipAddress:
+          type: string
+          nullable: true
+          description: Hashed IP address for internet communications
+        complianceStatus:
+          type: string
+          enum: [compliant, warning, violation]
+          description: Compliance assessment
+        automaticAction:
+          type: string
+          nullable: true
+          description: Automatic action taken (if any)
+
+    ComplianceSummaryReport:
+      type: object
+      required:
+        - reportPeriod
+        - totalEvents
+        - eventsByType
+        - complianceMetrics
+      properties:
+        reportPeriod:
+          $ref: '#/components/schemas/ReportPeriod'
+        totalEvents:
+          type: integer
+          description: Total number of compliance events
+        eventsByType:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of events by type
+        complianceMetrics:
+          $ref: '#/components/schemas/ComplianceMetrics'
+        userModeBreakdown:
+          type: object
+          properties:
+            licensed:
+              type: integer
+            unlicensed:
+              type: integer
+        protocolUsage:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Usage count by protocol
+        dataTransferred:
+          type: object
+          properties:
+            totalBytes:
+              type: integer
+            byProtocol:
+              type: object
+              additionalProperties:
+                type: integer
+
+    ComplianceViolationsReport:
+      type: object
+      required:
+        - reportPeriod
+        - violations
+        - totalViolations
+      properties:
+        reportPeriod:
+          $ref: '#/components/schemas/ReportPeriod'
+        violations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceViolation'
+        totalViolations:
+          type: integer
+          description: Total number of violations
+        violationsByType:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of violations by type
+        mostCommonViolations:
+          type: array
+          items:
+            type: object
+            properties:
+              violationType:
+                type: string
+              count:
+                type: integer
+              description:
+                type: string
+
+    ComplianceViolation:
+      type: object
+      required:
+        - logId
+        - timestamp
+        - violationType
+        - severity
+        - description
+      properties:
+        logId:
+          type: string
+          format: uuid
+          description: Associated log entry identifier
+        timestamp:
+          type: string
+          format: date-time
+          description: When violation occurred
+        violationType:
+          type: string
+          description: Type of compliance violation
+        severity:
+          type: string
+          enum: [warning, violation]
+          description: Violation severity level
+        description:
+          type: string
+          description: Human-readable violation description
+        userId:
+          type: string
+          description: User involved in violation
+        userMode:
+          type: string
+          enum: [licensed, unlicensed]
+          description: User mode at time of violation
+        automaticAction:
+          type: string
+          nullable: true
+          description: Automatic corrective action taken
+
+    ComplianceExportRequest:
+      type: object
+      required:
+        - format
+        - startDate
+        - endDate
+      properties:
+        format:
+          type: string
+          enum: [json, csv, xml, adif]
+          description: Export format
+        startDate:
+          type: string
+          format: date-time
+          description: Start date for export
+        endDate:
+          type: string
+          format: date-time
+          description: End date for export
+        eventTypes:
+          type: array
+          items:
+            type: string
+          description: Filter by specific event types
+        includeEventData:
+          type: boolean
+          default: true
+          description: Include detailed event data
+        anonymizeData:
+          type: boolean
+          default: false
+          description: Anonymize user identifiers
+
+    ComplianceExportResponse:
+      type: object
+      required:
+        - exportId
+        - format
+        - recordCount
+        - generatedAt
+      properties:
+        exportId:
+          type: string
+          format: uuid
+          description: Unique export identifier
+        format:
+          type: string
+          description: Export format used
+        recordCount:
+          type: integer
+          description: Number of records exported
+        generatedAt:
+          type: string
+          format: date-time
+          description: When export was generated
+        downloadUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: URL for downloading export file
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceLogEntry'
+          description: Exported compliance log entries (for JSON format)
+
+    ComplianceFlagsList:
+      type: object
+      required:
+        - flags
+        - totalCount
+      properties:
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceFlag'
+        totalCount:
+          type: integer
+          description: Total number of active flags
+
+    ComplianceFlag:
+      type: object
+      required:
+        - flagId
+        - flag
+        - severity
+        - description
+        - triggeredAt
+      properties:
+        flagId:
+          type: string
+          format: uuid
+          description: Unique flag identifier
+        flag:
+          type: string
+          description: Compliance flag identifier
+        severity:
+          type: string
+          enum: [info, warning, critical]
+          description: Flag severity level
+        description:
+          type: string
+          description: Human-readable flag description
+        triggeredAt:
+          type: string
+          format: date-time
+          description: When flag was activated
+        autoResolves:
+          type: boolean
+          description: Whether flag auto-resolves
+        userId:
+          type: string
+          nullable: true
+          description: Associated user (if specific to user)
+        relatedLogId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Associated compliance log entry
+
+    ComplianceFlagRequest:
+      type: object
+      required:
+        - flag
+        - severity
+        - description
+      properties:
+        flag:
+          type: string
+          description: Compliance flag identifier
+        severity:
+          type: string
+          enum: [info, warning, critical]
+          description: Flag severity level
+        description:
+          type: string
+          description: Human-readable flag description
+        autoResolves:
+          type: boolean
+          default: false
+          description: Whether flag should auto-resolve
+        userId:
+          type: string
+          nullable: true
+          description: Associate with specific user
+
+    ReportPeriod:
+      type: object
+      required:
+        - startDate
+        - endDate
+      properties:
+        startDate:
+          type: string
+          format: date-time
+          description: Report start date
+        endDate:
+          type: string
+          format: date-time
+          description: Report end date
+        generatedAt:
+          type: string
+          format: date-time
+          description: When report was generated
+
+    ComplianceMetrics:
+      type: object
+      required:
+        - compliantEvents
+        - warningEvents
+        - violationEvents
+        - complianceRate
+      properties:
+        compliantEvents:
+          type: integer
+          description: Number of compliant events
+        warningEvents:
+          type: integer
+          description: Number of warning events
+        violationEvents:
+          type: integer
+          description: Number of violation events
+        complianceRate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Overall compliance rate percentage
+        averageEventsPerDay:
+          type: number
+          description: Average number of events per day
+
+    PaginationInfo:
+      type: object
+      required:
+        - limit
+        - offset
+        - hasMore
+      properties:
+        limit:
+          type: integer
+          description: Number of entries per page
+        offset:
+          type: integer
+          description: Number of entries skipped
+        hasMore:
+          type: boolean
+          description: Whether more entries are available
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: When error occurred

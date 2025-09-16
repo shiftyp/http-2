@@ -1,0 +1,383 @@
+# WebSocket Message Contracts
+
+## Signaling Messages (/ws/signal)
+
+### Client → Server Messages
+
+#### REGISTER
+Register client with signaling server
+```yaml
+type: object
+required:
+  - type
+  - callsign
+properties:
+  type:
+    const: REGISTER
+  callsign:
+    type: string
+    description: Client callsign or GUEST
+  certificate:
+    type: string
+    description: Optional PEM certificate for verification
+```
+
+#### OFFER
+Send WebRTC offer to target peer
+```yaml
+type: object
+required:
+  - type
+  - target
+  - offer
+properties:
+  type:
+    const: OFFER
+  target:
+    type: string
+    description: Target client ID or callsign
+  offer:
+    type: object
+    properties:
+      type:
+        const: offer
+      sdp:
+        type: string
+```
+
+#### ANSWER
+Send WebRTC answer to initiator
+```yaml
+type: object
+required:
+  - type
+  - target
+  - answer
+properties:
+  type:
+    const: ANSWER
+  target:
+    type: string
+    description: Initiator client ID
+  answer:
+    type: object
+    properties:
+      type:
+        const: answer
+      sdp:
+        type: string
+```
+
+#### ICE_CANDIDATE
+Send ICE candidate to peer
+```yaml
+type: object
+required:
+  - type
+  - target
+  - candidate
+properties:
+  type:
+    const: ICE_CANDIDATE
+  target:
+    type: string
+  candidate:
+    type: object
+    properties:
+      candidate:
+        type: string
+      sdpMLineIndex:
+        type: number
+      sdpMid:
+        type: string
+```
+
+#### LIST_PEERS
+Request list of connected peers
+```yaml
+type: object
+required:
+  - type
+properties:
+  type:
+    const: LIST_PEERS
+```
+
+### Server → Client Messages
+
+#### REGISTERED
+Confirmation of registration
+```yaml
+type: object
+required:
+  - type
+  - clientId
+  - serverOwner
+  - peers
+properties:
+  type:
+    const: REGISTERED
+  clientId:
+    type: string
+    description: Assigned client ID
+  serverOwner:
+    type: string
+    description: Server owner callsign
+  peers:
+    type: array
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+        callsign:
+          type: string
+        hasLicense:
+          type: boolean
+```
+
+#### PEER_JOINED
+Notification of new peer
+```yaml
+type: object
+required:
+  - type
+  - peer
+properties:
+  type:
+    const: PEER_JOINED
+  peer:
+    type: object
+    properties:
+      id:
+        type: string
+      callsign:
+        type: string
+```
+
+#### PEER_LEFT
+Notification of peer disconnect
+```yaml
+type: object
+required:
+  - type
+  - peerId
+properties:
+  type:
+    const: PEER_LEFT
+  peerId:
+    type: string
+```
+
+#### OFFER_RECEIVED
+Incoming offer from peer
+```yaml
+type: object
+required:
+  - type
+  - from
+  - offer
+properties:
+  type:
+    const: OFFER_RECEIVED
+  from:
+    type: string
+    description: Initiator client ID
+  offer:
+    type: object
+    properties:
+      type:
+        const: offer
+      sdp:
+        type: string
+```
+
+#### ANSWER_RECEIVED
+Incoming answer from peer
+```yaml
+type: object
+required:
+  - type
+  - from
+  - answer
+properties:
+  type:
+    const: ANSWER_RECEIVED
+  from:
+    type: string
+    description: Target client ID
+  answer:
+    type: object
+    properties:
+      type:
+        const: answer
+      sdp:
+        type: string
+```
+
+#### ICE_CANDIDATE_RECEIVED
+Incoming ICE candidate
+```yaml
+type: object
+required:
+  - type
+  - from
+  - candidate
+properties:
+  type:
+    const: ICE_CANDIDATE_RECEIVED
+  from:
+    type: string
+  candidate:
+    type: object
+```
+
+#### ERROR
+Error message
+```yaml
+type: object
+required:
+  - type
+  - error
+properties:
+  type:
+    const: ERROR
+  error:
+    type: string
+  details:
+    type: object
+```
+
+## Coordination Messages (/ws/coordinate)
+
+### Server → Server Messages
+
+#### CERT_SYNC
+Exchange certificate lists
+```yaml
+type: object
+required:
+  - type
+  - certificates
+properties:
+  type:
+    const: CERT_SYNC
+  certificates:
+    type: array
+    items:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+        certificate:
+          type: string
+        chain:
+          type: array
+          items:
+            type: string
+```
+
+#### PEER_ANNOUNCE
+Announce server presence
+```yaml
+type: object
+required:
+  - type
+  - server
+properties:
+  type:
+    const: PEER_ANNOUNCE
+  server:
+    type: object
+    properties:
+      callsign:
+        type: string
+      endpoint:
+        type: string
+      capabilities:
+        type: array
+        items:
+          type: string
+```
+
+#### CONTENT_SYNC
+Synchronize content catalogs
+```yaml
+type: object
+required:
+  - type
+  - catalog
+properties:
+  type:
+    const: CONTENT_SYNC
+  catalog:
+    type: object
+    properties:
+      entries:
+        type: array
+        items:
+          type: object
+          properties:
+            path:
+              type: string
+            hash:
+              type: string
+            size:
+              type: integer
+```
+
+#### BLACKLIST_UPDATE
+Share blacklist updates
+```yaml
+type: object
+required:
+  - type
+  - blacklist
+properties:
+  type:
+    const: BLACKLIST_UPDATE
+  blacklist:
+    type: array
+    items:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+        reason:
+          type: string
+        timestamp:
+          type: integer
+```
+
+## Message Flow Sequences
+
+### WebRTC Connection Establishment
+```
+1. Client A → Server: REGISTER
+2. Server → Client A: REGISTERED (with peer list)
+3. Client A → Server: OFFER (target: Client B)
+4. Server → Client B: OFFER_RECEIVED (from: Client A)
+5. Client B → Server: ANSWER (target: Client A)
+6. Server → Client A: ANSWER_RECEIVED (from: Client B)
+7. Client A → Server: ICE_CANDIDATE (target: Client B)
+8. Server → Client B: ICE_CANDIDATE_RECEIVED (from: Client A)
+9. Client B → Server: ICE_CANDIDATE (target: Client A)
+10. Server → Client A: ICE_CANDIDATE_RECEIVED (from: Client B)
+```
+
+### Server Coordination
+```
+1. Server A → Server B: PEER_ANNOUNCE
+2. Server B → Server A: PEER_ANNOUNCE
+3. Server A → Server B: CERT_SYNC
+4. Server B → Server A: CERT_SYNC
+5. Server A → Server B: CONTENT_SYNC
+6. Server B → Server A: CONTENT_SYNC
+```
+
+## Rate Limiting
+
+- Maximum message size: 64KB
+- Maximum messages per client: 100/minute
+- Maximum ICE candidates per session: 50
+- Connection timeout: 30 seconds idle

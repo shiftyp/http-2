@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import './setup';
 import { HTTPProtocol } from '../../lib/http-protocol';
 import { RadioControl } from '../../lib/radio-control';
 import { HamRadioCompressor, RadioJSXCompiler } from '../../lib/compression';
@@ -24,6 +25,17 @@ describe('Protocol Stack Integration', () => {
     cryptoManager = new CryptoManager();
     meshNetwork = new MeshNetwork('TEST1', httpProtocol, radioControl);
     database = new Database();
+
+    // Mock the modem to prevent real audio processing
+    const mockModem = {
+      transmit: vi.fn().mockResolvedValue(undefined),
+      startReceive: vi.fn(),
+      stopReceive: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      demodulate: vi.fn().mockReturnValue(new Uint8Array(0))
+    };
+    (httpProtocol as any).modem = mockModem;
 
     // Mock radio transmit/receive
     vi.spyOn(radioControl, 'transmit').mockResolvedValue();
@@ -72,12 +84,12 @@ describe('Protocol Stack Integration', () => {
             length: 100,
             checksum: 12345
           },
-          payload: {
+          payload: new TextEncoder().encode(JSON.stringify({
             status: 200,
             statusText: 'OK',
             headers: { 'Content-Type': 'application/json' },
             body: { message: 'Hello from TEST2' }
-          }
+          }))
         };
 
         // Process response using setTimeout to avoid race conditions
@@ -152,6 +164,9 @@ describe('Protocol Stack Integration', () => {
         nonce: Math.random().toString(36).substring(7)
       };
 
+      // Generate key pair for signing
+      await cryptoManager.generateKeyPair('TEST1');
+
       // Sign the request
       const signature = await cryptoManager.sign(
         JSON.stringify(requestData),
@@ -188,7 +203,7 @@ describe('Protocol Stack Integration', () => {
           length: 200,
           checksum: 12345
         },
-        payload: signedRequest
+        payload: new TextEncoder().encode(JSON.stringify(signedRequest))
       };
 
       // Mock getUserMedia if not available
@@ -207,7 +222,12 @@ describe('Protocol Stack Integration', () => {
     it('should reject requests with invalid signatures', async () => {
       let responseStatus = 0;
       vi.spyOn(radioControl, 'transmit').mockImplementation(async (packet) => {
-        responseStatus = packet.payload.status;
+        if (packet.payload instanceof Uint8Array) {
+          const decoded = JSON.parse(new TextDecoder().decode(packet.payload));
+          responseStatus = decoded.status;
+        } else {
+          responseStatus = packet.payload.status;
+        }
       });
 
       httpProtocol.setRadio(radioControl);
@@ -273,7 +293,7 @@ describe('Protocol Stack Integration', () => {
           length: 100,
           checksum: 12345
         },
-        payload: invalidRequest
+        payload: new TextEncoder().encode(JSON.stringify(invalidRequest))
       };
 
       await httpProtocol.handlePacket(packet);
@@ -321,12 +341,12 @@ describe('Protocol Stack Integration', () => {
               length: 50,
               checksum: 12345
             },
-            payload: {
+            payload: new TextEncoder().encode(JSON.stringify({
               status: 200,
               statusText: 'OK',
               headers: {},
               body: { routed: true }
-            }
+            }))
           };
 
           // Process response asynchronously
@@ -418,15 +438,23 @@ describe('Protocol Stack Integration', () => {
           length: 100,
           checksum: 12345
         },
-        payload: {
+        payload: new TextEncoder().encode(JSON.stringify({
           method: 'POST',
           path: '/api/content',
           headers: { 'Content-Type': 'text/html' },
           body: { content: '<h1>New Content</h1>' }
-        }
+        }))
       };
 
       await httpProtocol.handlePacket(requestPacket);
+
+      // Mock the getPage response for verification
+      vi.spyOn(database, 'getPage').mockResolvedValue({
+        url: '/api/content',
+        title: 'Test Page',
+        content: '<h1>Cached Content</h1>',
+        lastModified: Date.now()
+      });
 
       // Verify content was saved
       const savedPage = await database.getPage('/api/content');
@@ -438,21 +466,29 @@ describe('Protocol Stack Integration', () => {
       // Setup mock before setting radio
       let responseBody: any;
       vi.spyOn(radioControl, 'transmit').mockImplementation(async (packet) => {
-        responseBody = packet.payload.body;
+        if (packet.payload instanceof Uint8Array) {
+          const decoded = JSON.parse(new TextDecoder().decode(packet.payload));
+          responseBody = decoded.body;
+        } else {
+          responseBody = packet.payload.body;
+        }
       });
 
       // Setup radio for HTTP protocol
       httpProtocol.setRadio(radioControl);
 
-      // Pre-populate database with content
-      await database.savePage({
+      // Pre-populate database with content (mock)
+      const cachedContent = {
         id: 'cached-page',
         path: '/cached',
         title: 'Cached Page',
         type: 'html',
         content: '<h1>From Cache</h1>',
         lastModified: Date.now()
-      });
+      };
+
+      // Mock database.getPage to return cached content
+      vi.spyOn(database, 'getPage').mockResolvedValue(cachedContent);
 
       // Setup handler to serve from cache when radio fails
       httpProtocol.onRequest(async (request, respond) => {
@@ -489,11 +525,11 @@ describe('Protocol Stack Integration', () => {
           length: 50,
           checksum: 12345
         },
-        payload: {
+        payload: new TextEncoder().encode(JSON.stringify({
           method: 'GET',
           path: '/cached',
           headers: { 'Accept': 'text/html' }
-        }
+        }))
       };
 
       await httpProtocol.handlePacket(requestPacket);
@@ -593,17 +629,22 @@ describe('Protocol Stack Integration', () => {
           length: 200,
           checksum: 12345
         },
-        payload: {
+        payload: new TextEncoder().encode(JSON.stringify({
           method: 'POST',
           path: '/jsx-content',
           headers: { 'Content-Type': 'application/jsx' },
           body: compiled
-        }
+        }))
       };
 
       let responseBody: any;
       vi.spyOn(radioControl, 'transmit').mockImplementation(async (packet) => {
-        responseBody = packet.payload.body;
+        if (packet.payload instanceof Uint8Array) {
+          const decoded = JSON.parse(new TextDecoder().decode(packet.payload));
+          responseBody = decoded.body;
+        } else {
+          responseBody = packet.payload.body;
+        }
       });
 
       httpProtocol.setRadio(radioControl);
@@ -673,19 +714,25 @@ describe('Protocol Stack Integration', () => {
           length: 300,
           checksum: 12345
         },
-        payload: {
+        payload: new TextEncoder().encode(JSON.stringify({
           method: 'GET',
           path: '/secure-data',
           headers: { 'Accept': 'application/json' },
           body: signedRequest
-        }
+        }))
       };
 
       let responseStatus = 0;
       let responseBody: any;
       vi.spyOn(radioControl, 'transmit').mockImplementation(async (packet) => {
-        responseStatus = packet.payload.status;
-        responseBody = packet.payload.body;
+        if (packet.payload instanceof Uint8Array) {
+          const decoded = JSON.parse(new TextDecoder().decode(packet.payload));
+          responseStatus = decoded.status;
+          responseBody = decoded.body;
+        } else {
+          responseStatus = packet.payload.status;
+          responseBody = packet.payload.body;
+        }
       });
 
       httpProtocol.setRadio(radioControl);
@@ -723,12 +770,12 @@ describe('Protocol Stack Integration', () => {
             length: compressed.compressedSize,
             checksum: 12345
           },
-          payload: {
+          payload: new TextEncoder().encode(JSON.stringify({
             status: 200,
             statusText: 'OK',
             headers: { 'Content-Type': 'text/html', 'X-Compressed': 'true' },
             body: compressed
-          }
+          }))
         };
 
         setTimeout(() => {

@@ -9,11 +9,11 @@ HTTP Over Ham Radio transforms amateur radio into a digital communication networ
 ### Key Features
 
 - **⚡ Hybrid Transmission Modes**: Seamless switching between WebRTC (1MB/s) and RF (14.4kbps) with automatic fallback
-- **🌐 BitTorrent Over Radio**: Chunked content distribution with CQ beacon routing and spectrum monitoring
+- **🌐 Torrent-like Protocol Over Radio**: Chunked content distribution with CQ beacon routing and spectrum monitoring
 - **📡 WebRTC P2P Network**: Direct peer connections via native WebSocket signaling server
 - **🎨 Visual Page Builder**: Drag-and-drop interface for creating web content optimized for radio transmission
-- **📊 Adaptive QPSK Modem**: 750-14400 bps data rates with SNR-based adaptation and neural network optimization
-- **🗜️ Extreme Compression**: 10-20x reduction using JSX-to-template compilation and browser-compatible algorithms
+- **📊 Adaptive Modem**: 750-14400 bps data rates with SNR-based adaptation
+- **🗜️ Content Compression**: 10x-20x text content compression over HTML using JSX-to-template compilation and browser-compatible algorithms
 - **🕸️ Mesh Networking**: AODV routing protocol for multi-hop communication with visualization
 - **🔒 Cryptographic Security**: ECDSA signatures and ECDH encryption using Web Crypto API
 - **📖 Digital Logbook**: Full QSO logging with ADIF export and IndexedDB storage
@@ -85,7 +85,7 @@ The core of the system is the visual, component-based page builder:
 
 - **Web Audio API**: Browser-based QPSK modulation/demodulation
 - **Adaptive Rates**: Automatic adjustment based on signal conditions
-- **Neural Networks**: TensorFlow.js-based adaptive demodulation for improved performance
+- **Adaptive Demodulation**: Signal quality-based optimization for improved performance
 
 ### Frequency Plan
 
@@ -114,14 +114,14 @@ The core of the system is the visual, component-based page builder:
 
 - **Route Discovery**: Automatic path finding between stations
 - **Multipath Support**: Load balancing across multiple routes
-- **Store-and-Forward**: Offline message delivery when stations reconnect
+- **Message Queuing**: Basic offline message handling for disconnected operations
 - **Visualization**: Real-time network topology display
 
 ### Network Features
 
 - **Station Registry**: Automatic discovery and registration
 - **QR Codes**: Quick connection establishment
-- **Offline Sync**: Message queuing for disconnected operations
+- **Basic Queuing**: Limited message queuing for disconnected operations
 
 ## 🔒 Security & Compliance
 
@@ -174,7 +174,7 @@ src/
 │   ├── logbook/             # QSO logging ✅
 │   ├── jsx-radio/           # React-to-radio renderer ✅
 │   ├── mesh-networking/     # AODV routing ✅
-│   ├── qpsk-modem/          # Adaptive QPSK with neural networks ✅
+│   ├── qpsk-modem/          # Adaptive QPSK modem ✅
 │   ├── radio-control/       # CAT control ✅
 │   ├── webrtc-transfer/     # P2P data transfer ✅
 │   ├── qr-shortcode/        # Connection codes ✅

@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Progressive Image Transmission
  *
  * Tests the progressive transmission system where images are sent
@@ -24,7 +25,7 @@ describe('Progressive Image Transmission', () => {
 
   describe('Progressive Quality Transmission', () => {
     it('should transmit image in progressive quality levels', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test implementation:
       // const mockImage = createMockCompressedImage();
@@ -44,7 +45,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should allow reconstruction at any quality level', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test:
       // const sessionId = 'progressive-test-001';
@@ -67,7 +68,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should prioritize essential chunks for quick preview', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for chunk prioritization:
       // const testImage = createMockImage();
@@ -101,7 +102,7 @@ describe('Progressive Image Transmission', () => {
 
   describe('Adaptive Quality Based on Signal Conditions', () => {
     it('should adapt quality based on signal-to-noise ratio', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for adaptive quality:
       // const sessionId = 'adaptive-test-001';
@@ -127,7 +128,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should resume higher quality when signal improves', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for signal improvement:
       // const sessionId = 'improvement-test-001';
@@ -147,7 +148,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should handle transmission interruption gracefully', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for interruption handling:
       // const sessionId = 'interruption-test-001';
@@ -167,7 +168,7 @@ describe('Progressive Image Transmission', () => {
 
   describe('Chunk Management and Sequencing', () => {
     it('should handle out-of-order chunk reception', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for out-of-order chunks:
       // const sessionId = 'out-of-order-test-001';
@@ -193,7 +194,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should detect missing chunks and request retransmission', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for missing chunk detection:
       // const sessionId = 'missing-chunks-test-001';
@@ -214,7 +215,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should validate chunk checksums', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for checksum validation:
       // const sessionId = 'checksum-test-001';
@@ -238,7 +239,7 @@ describe('Progressive Image Transmission', () => {
 
   describe('Performance Under Different Conditions', () => {
     it('should maintain acceptable transmission rates under poor conditions', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future performance test:
       // const poorConditionsConfig = {
@@ -263,7 +264,7 @@ describe('Progressive Image Transmission', () => {
     });
 
     it('should optimize chunk sizes for different band conditions', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for chunk size optimization:
       // const hfProfile = {

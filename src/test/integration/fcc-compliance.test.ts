@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: FCC Compliance Logging for Image Transmission
  *
  * Tests the FCC Part 97 compliance logging and reporting systems
@@ -20,7 +21,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
 
   describe('Transmission Logging Requirements', () => {
     it('should log all image transmission activities', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test implementation:
       // const sessionId = 'compliance-test-001';
@@ -60,7 +61,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should include required FCC identification information', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for FCC ID requirements:
       // const sessionId = 'fcc-id-test-001';
@@ -85,7 +86,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should track total data transmitted for bandwidth compliance', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for bandwidth tracking:
       // const sessionId = 'bandwidth-tracking-test-001';
@@ -118,7 +119,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
 
   describe('Station Identification Requirements', () => {
     it('should ensure station ID transmission every 10 minutes during long transfers', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for station ID requirements:
       // const sessionId = 'station-id-test-001';
@@ -144,7 +145,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should include station ID at beginning and end of transmission', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for start/end station ID:
       // const sessionId = 'start-end-id-test-001';
@@ -168,7 +169,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
 
   describe('Content and Encryption Compliance', () => {
     it('should verify no encryption is applied to image content', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for no-encryption compliance:
       // const sessionId = 'no-encryption-test-001';
@@ -188,7 +189,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should log image content type and purpose for compliance', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for content logging:
       // const sessionId = 'content-type-test-001';
@@ -213,7 +214,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
 
   describe('Compliance Reporting', () => {
     it('should generate comprehensive FCC compliance reports', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for compliance reporting:
       // const startDate = new Date('2024-01-01');
@@ -244,7 +245,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should include bandwidth utilization in compliance reports', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for bandwidth reporting:
       // const startDate = new Date('2024-01-01');
@@ -263,7 +264,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should export compliance data in standard formats', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for export formats:
       // const report = await transmissionService.exportComplianceReport(
@@ -296,7 +297,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
 
   describe('Error and Exception Logging', () => {
     it('should log transmission errors with sufficient detail', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for error logging:
       // const sessionId = 'error-logging-test-001';
@@ -328,7 +329,7 @@ describe('FCC Compliance Logging for Image Transmission', () => {
     });
 
     it('should maintain log integrity and prevent tampering', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for log integrity:
       // const sessionId = 'log-integrity-test-001';

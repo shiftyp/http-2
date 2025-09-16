@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Tests: Hybrid Mode Switching
  *
  * Tests integration between BitTorrent Protocol (spec 013) and WebRTC Transmission Mode (spec 014)

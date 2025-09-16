@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/Alert';
 import PageBuilder from './PageBuilder';
+import PageViewer from '../components/PageViewer';
 import { db } from '../lib/database';
 
 interface Page {
@@ -199,9 +200,16 @@ const ContentCreatorOverview: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-400">{formatTimeAgo(page.lastModified)}</span>
-                    <Button size="sm" className="bg-gray-600 hover:bg-gray-700">
-                      Edit
-                    </Button>
+                    <Link to={`/content/view/${page.id}`}>
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                        View
+                      </Button>
+                    </Link>
+                    <Link to={`/content/edit/${page.id}`}>
+                      <Button size="sm" className="bg-gray-600 hover:bg-gray-700">
+                        Edit
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               ))}
@@ -245,6 +253,8 @@ const ContentCreator: React.FC = () => {
         <Routes>
           <Route index element={<ContentCreatorOverview />} />
           <Route path="page-builder" element={<PageBuilder />} />
+          <Route path="view/:pageId" element={<PageViewer />} />
+          <Route path="edit/:pageId" element={<PageBuilder />} />
           <Route path="*" element={<Navigate to="/content" replace />} />
         </Routes>
       </div>

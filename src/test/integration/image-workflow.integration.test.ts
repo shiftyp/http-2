@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Image Upload and Optimization Workflow
  *
  * Tests the complete workflow of uploading an image, optimizing it for
@@ -31,7 +32,7 @@ describe('Image Upload and Optimization Workflow', () => {
       });
 
       // This should fail until implementation exists
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test implementation:
       // 1. Validate the uploaded file
@@ -81,7 +82,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should integrate optimized image into page builder component', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for page builder integration:
       // const imageBlob = new Blob(['fake image data'], { type: 'image/jpeg' });
@@ -115,7 +116,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should calculate accurate transmission metrics for page with images', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for transmission metrics:
       // const components = [
@@ -153,7 +154,7 @@ describe('Image Upload and Optimization Workflow', () => {
 
   describe('Error Handling in Workflow', () => {
     it('should handle invalid image formats gracefully', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test:
       // const invalidFile = new File(['not an image'], 'test.txt', {
@@ -167,7 +168,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should handle oversized images', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test:
       // const oversizedBlob = new Blob([new Array(10 * 1024 * 1024).fill(0)], {
@@ -182,7 +183,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should adapt quality when bandwidth is limited', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for adaptive quality:
       // const strictBandwidth = 1200; // Very limited bandwidth
@@ -202,7 +203,7 @@ describe('Image Upload and Optimization Workflow', () => {
 
   describe('Performance Requirements', () => {
     it('should process typical images within performance targets', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future performance test:
       // const startTime = performance.now();
@@ -221,7 +222,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should achieve target compression ratios', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future compression test:
       // const results = [];
@@ -244,7 +245,7 @@ describe('Image Upload and Optimization Workflow', () => {
 
   describe('Integration with Existing Systems', () => {
     it('should integrate with existing protobuf compression system', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for protobuf integration:
       // const imageComponent = {
@@ -273,7 +274,7 @@ describe('Image Upload and Optimization Workflow', () => {
     });
 
     it('should work with existing database and logging systems', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for database integration:
       // const mockSession = {

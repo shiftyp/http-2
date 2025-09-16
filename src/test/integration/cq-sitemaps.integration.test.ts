@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import './setup';
 import { CQSitemaps, SitemapEntry, CQSitemapMessage, SITEMAP_TIMEOUTS } from '../../lib/cq-sitemaps';
 import { SitemapDiscovery } from '../../lib/sitemap-discovery';
 

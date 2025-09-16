@@ -181,7 +181,7 @@ export class HamRadioCompressor {
     // Replace dictionary terms with tokens
     for (const [term, id] of this.dictionary) {
       const token = `\x01${String.fromCharCode(id)}\x02`;
-      compressed = compressed.replace(new RegExp(term, 'gi'), token);
+      compressed = compressed.replace(new RegExp(term, 'g'), token);
     }
     
     return compressed;
@@ -521,5 +521,22 @@ export class HamRadioCompressor {
     const parsed = JSON.parse(text);
     const decompressed = this.decompressHTML(parsed);
     return new TextEncoder().encode(decompressed);
+  }
+
+  // Synchronous compression for Buffer (for tests)
+  compress(data: Buffer): Buffer {
+    const uint8Array = new Uint8Array(data);
+    const text = new TextDecoder().decode(uint8Array);
+
+    // Simple LZ compression for non-HTML data
+    const compressed = this.simpleLZCompress(text);
+    return Buffer.from(compressed);
+  }
+
+  // Synchronous decompression for Buffer (for tests)
+  decompress(data: Buffer): Buffer {
+    const uint8Array = new Uint8Array(data);
+    const decompressed = this.simpleLZDecompress(uint8Array);
+    return Buffer.from(decompressed);
   }
 }

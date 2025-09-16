@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Waterfall Display Rendering
  * Tests real-time spectrum visualization and WebGL rendering
  *
@@ -121,8 +122,8 @@ describe('Waterfall Display Integration Tests', () => {
       });
 
       // This will fail until WaterfallDisplay is implemented
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const initResult = await display.initialize(config);
 
@@ -135,8 +136,8 @@ describe('Waterfall Display Integration Tests', () => {
     it('should handle WebGL context creation failure gracefully', async () => {
       mockCanvas.getContext.mockReturnValue(null); // WebGL not supported
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       await expect(display.initialize({}))
         .rejects.toThrow('WebGL not supported');
@@ -149,8 +150,8 @@ describe('Waterfall Display Integration Tests', () => {
         intensityRange: { min: -50, max: -100 } // Invalid range
       };
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       await expect(display.initialize(invalidConfig))
         .rejects.toThrow('Invalid configuration');
@@ -182,8 +183,8 @@ describe('Waterfall Display Integration Tests', () => {
       mockWebGLContext.createShader.mockReturnValue('shader-id');
       mockWebGLContext.createProgram.mockReturnValue('program-id');
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       await display.initialize({});
 
@@ -195,8 +196,8 @@ describe('Waterfall Display Integration Tests', () => {
 
   describe('Real-time Data Processing', () => {
     beforeEach(async () => {
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
       await display.initialize({});
     });
 
@@ -213,8 +214,8 @@ describe('Waterfall Display Integration Tests', () => {
         });
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const startTime = performance.now();
       const result = await display.updateSpectrumData(mockSpectrumData);
@@ -240,8 +241,8 @@ describe('Waterfall Display Integration Tests', () => {
         return Promise.resolve({ processed: true });
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const promises = dataUpdates.map(data => display.updateSpectrumData(data));
       await Promise.all(promises);
@@ -269,8 +270,8 @@ describe('Waterfall Display Integration Tests', () => {
         ]
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const result = await display.updateSpectrumData(dataWithPeaks);
 
@@ -293,8 +294,8 @@ describe('Waterfall Display Integration Tests', () => {
         };
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       await display.setConfiguration({ historyDepth, refreshRate });
 
@@ -324,8 +325,8 @@ describe('Waterfall Display Integration Tests', () => {
           colormapSize: 256
         });
 
-        const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-        const display = new WaterfallDisplay(mockCanvas);
+        // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+        const display = mockWaterfallDisplay;
 
         const result = await display.setConfiguration({ colormap });
 
@@ -352,8 +353,8 @@ describe('Waterfall Display Integration Tests', () => {
         return intensityMap['-20dB'];
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const noiseColor = display.mapIntensityToColor(-95);
       const signalColor = display.mapIntensityToColor(-65);
@@ -374,8 +375,8 @@ describe('Waterfall Display Integration Tests', () => {
         contrastImproved: true
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       await display.setConfiguration({ intensityRange: initialRange });
       const result = await display.setConfiguration({ intensityRange: adjustedRange });
@@ -402,8 +403,8 @@ describe('Waterfall Display Integration Tests', () => {
         resolution: 48.8 // Hz per bin at higher zoom
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const zoomResult = await display.zoom(zoomOperation);
 
@@ -426,8 +427,8 @@ describe('Waterfall Display Integration Tests', () => {
         }
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       let selectedFrequency = 0;
       display.on('frequencySelected', (event) => {
@@ -451,8 +452,8 @@ describe('Waterfall Display Integration Tests', () => {
 
       mockWaterfallDisplay.measureBandwidth = vi.fn().mockReturnValue(measurementTool);
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const measurement = display.measureBandwidth(14080000, 14090000);
 
@@ -484,8 +485,8 @@ describe('Waterfall Display Integration Tests', () => {
         };
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       // Simulate 2 seconds of rendering
       for (let i = 0; i < 60; i++) {
@@ -509,8 +510,8 @@ describe('Waterfall Display Integration Tests', () => {
 
       mockWaterfallDisplay.getMemoryUsage = vi.fn().mockReturnValue(memoryUsage);
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       // Simulate extended operation
       for (let i = 0; i < 1000; i++) {
@@ -540,8 +541,8 @@ describe('Waterfall Display Integration Tests', () => {
         return qualityAdjustments;
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       const adaptations = display.adaptQuality(performanceMetrics);
 
@@ -568,8 +569,8 @@ describe('Waterfall Display Integration Tests', () => {
         dataRecovered: true
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       let contextLost = false;
       display.on('contextLost', () => {
@@ -606,8 +607,8 @@ describe('Waterfall Display Integration Tests', () => {
         return Promise.resolve({ processed: true });
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       for (const badData of malformedData) {
         await expect(display.updateSpectrumData(badData))
@@ -632,8 +633,8 @@ describe('Waterfall Display Integration Tests', () => {
         }
       });
 
-      const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = new WaterfallDisplay(mockCanvas);
+      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
+      const display = mockWaterfallDisplay;
 
       let errorsCaught = 0;
       display.on('renderError', () => {

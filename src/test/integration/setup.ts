@@ -1,9 +1,30 @@
 import { vi } from 'vitest';
+import '@testing-library/jest-dom';
 
 /**
  * Setup file for integration tests
  * Provides mocks for browser APIs needed by the tests
  */
+
+// Mock logbook module
+vi.mock('../../lib/logbook', () => ({
+  logbook: {
+    open: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    addQSO: vi.fn().mockResolvedValue('qso-id'),
+    listQSOs: vi.fn().mockResolvedValue([]),
+    getQSO: vi.fn().mockResolvedValue(null),
+    deleteQSO: vi.fn().mockResolvedValue(undefined),
+    savePage: vi.fn().mockResolvedValue('page-id'),
+    listPages: vi.fn().mockResolvedValue([]),
+    getPage: vi.fn().mockResolvedValue(null),
+    deletePage: vi.fn().mockResolvedValue(undefined),
+    addMeshNode: vi.fn().mockResolvedValue('node-id'),
+    listMeshNodes: vi.fn().mockResolvedValue([]),
+    getMeshNode: vi.fn().mockResolvedValue(null),
+    deleteMeshNode: vi.fn().mockResolvedValue(undefined)
+  }
+}))
 
 // Mock IndexedDB
 class MockIDBRequest {
@@ -228,7 +249,8 @@ class MockAudioContext {
       numberOfChannels: channels,
       length,
       sampleRate,
-      getChannelData: vi.fn((channel: number) => new Float32Array(length))
+      getChannelData: vi.fn((channel: number) => new Float32Array(length)),
+      copyToChannel: vi.fn((source: Float32Array, channelNumber: number, startInChannel?: number) => {})
     };
   }
 
@@ -332,6 +354,51 @@ Object.defineProperty(global, 'crypto', {
   configurable: true,
   writable: true
 });
+
+// Mock DOM and window properties
+Object.defineProperty(window, 'location', {
+  value: {
+    href: 'http://localhost:3000/',
+    origin: 'http://localhost:3000',
+    protocol: 'http:',
+    host: 'localhost:3000',
+    hostname: 'localhost',
+    port: '3000',
+    pathname: '/',
+    search: '',
+    hash: ''
+  },
+  writable: true
+});
+
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+// Mock ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
+// Mock IntersectionObserver
+global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
 
 // Export for use in tests
 export {

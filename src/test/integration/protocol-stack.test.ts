@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import './setup';
 import { HTTPProtocol } from '../../lib/http-protocol';
-import { RadioControl } from '../../lib/radio';
+import { RadioControl } from '../../lib/radio-control';
 import { HamRadioCompressor, RadioJSXCompiler } from '../../lib/compression';
 import { CryptoManager } from '../../lib/crypto';
-import { MeshNetwork } from '../../lib/mesh';
+import { MeshNetwork } from '../../lib/mesh-networking';
 import { Database } from '../../lib/database';
 
 describe('Protocol Stack Integration', () => {
@@ -16,14 +17,28 @@ describe('Protocol Stack Integration', () => {
   let database: Database;
 
   beforeEach(async () => {
+    // Use fake timers to prevent hanging
+    vi.useFakeTimers();
+
     // Initialize all components
     httpProtocol = new HTTPProtocol({ callsign: 'TEST1' });
     radioControl = new RadioControl();
     compressor = new HamRadioCompressor();
     jsxCompiler = new RadioJSXCompiler();
     cryptoManager = new CryptoManager();
-    meshNetwork = new MeshNetwork({ callsign: 'TEST1' });
+    meshNetwork = new MeshNetwork('TEST1', httpProtocol, radioControl);
     database = new Database();
+
+    // Mock the modem to prevent real audio processing
+    const mockModem = {
+      transmit: vi.fn().mockResolvedValue(undefined),
+      startReceive: vi.fn(),
+      stopReceive: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      demodulate: vi.fn().mockReturnValue(new Uint8Array(0))
+    };
+    (httpProtocol as any).modem = mockModem;
 
     // Mock radio transmit/receive
     vi.spyOn(radioControl, 'transmit').mockResolvedValue();
@@ -35,6 +50,10 @@ describe('Protocol Stack Integration', () => {
 
     // Generate crypto keys
     await cryptoManager.generateKeyPair('TEST1');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('HTTP Request/Response Flow', () => {

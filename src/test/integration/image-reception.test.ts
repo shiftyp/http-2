@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Image Reception and Reconstruction
  *
  * Tests the complete workflow of receiving progressive image data
@@ -23,7 +24,7 @@ describe('Image Reception and Reconstruction', () => {
 
   describe('Complete Reception Workflow', () => {
     it('should receive and reconstruct a complete image', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test implementation:
       // const sessionId = 'complete-reception-test-001';
@@ -60,7 +61,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should provide viewable previews during progressive reception', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for progressive previews:
       // const sessionId = 'progressive-preview-test-001';
@@ -87,7 +88,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should handle reception status updates correctly', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for status tracking:
       // const sessionId = 'status-tracking-test-001';
@@ -129,7 +130,7 @@ describe('Image Reception and Reconstruction', () => {
 
   describe('Partial Reception Handling', () => {
     it('should reconstruct partial images when some chunks are missing', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for partial reconstruction:
       // const sessionId = 'partial-reception-test-001';
@@ -159,7 +160,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should prioritize base chunk for minimal viable image', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for base chunk priority:
       // const sessionId = 'base-priority-test-001';
@@ -181,7 +182,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should handle timeout scenarios gracefully', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for reception timeouts:
       // const sessionId = 'timeout-test-001';
@@ -212,7 +213,7 @@ describe('Image Reception and Reconstruction', () => {
 
   describe('Quality and Signal Adaptation', () => {
     it('should track signal quality during reception', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for signal quality tracking:
       // const sessionId = 'signal-quality-test-001';
@@ -238,7 +239,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should request retransmission for poor quality chunks', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for retransmission requests:
       // const sessionId = 'retransmission-test-001';
@@ -264,7 +265,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should adapt reception parameters based on signal conditions', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for adaptive reception:
       // const sessionId = 'adaptive-reception-test-001';
@@ -295,7 +296,7 @@ describe('Image Reception and Reconstruction', () => {
 
   describe('Integration with Page Builder', () => {
     it('should integrate reconstructed images with page components', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for page builder integration:
       // const sessionId = 'page-integration-test-001';
@@ -339,7 +340,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should provide real-time updates to UI during reception', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for UI updates:
       // const sessionId = 'ui-updates-test-001';
@@ -375,7 +376,7 @@ describe('Image Reception and Reconstruction', () => {
 
   describe('Performance and Resource Management', () => {
     it('should handle concurrent image receptions efficiently', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future performance test:
       // const sessionIds = ['concurrent-1', 'concurrent-2', 'concurrent-3'];
@@ -413,7 +414,7 @@ describe('Image Reception and Reconstruction', () => {
     });
 
     it('should manage memory usage during large image reception', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for memory management:
       // const sessionId = 'memory-test-001';

@@ -1,4 +1,5 @@
 /**
+import './setup';
  * Integration Test: Error Recovery and Fallbacks
  *
  * Tests the error recovery mechanisms for image transmission,
@@ -23,7 +24,7 @@ describe('Error Recovery and Fallbacks', () => {
 
   describe('Transmission Error Recovery', () => {
     it('should retry failed chunk transmissions', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test implementation:
       // const sessionId = 'retry-test-001';
@@ -51,7 +52,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should fallback to lower quality when repeated failures occur', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for quality fallback:
       // const sessionId = 'fallback-test-001';
@@ -75,7 +76,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should handle complete transmission failure gracefully', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for complete failure:
       // const sessionId = 'complete-failure-test-001';
@@ -105,7 +106,7 @@ describe('Error Recovery and Fallbacks', () => {
 
   describe('Reception Error Recovery', () => {
     it('should handle corrupted chunk data', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for corrupted data handling:
       // const sessionId = 'corruption-test-001';
@@ -144,7 +145,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should reconstruct partial images when possible', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for partial reconstruction:
       // const sessionId = 'partial-reconstruction-test-001';
@@ -170,7 +171,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should repair data using error correction when available', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for error correction:
       // const sessionId = 'error-correction-test-001';
@@ -198,7 +199,7 @@ describe('Error Recovery and Fallbacks', () => {
 
   describe('Adaptive Fallback Strategies', () => {
     it('should reduce image dimensions when compression fails', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for dimension fallback:
       // const oversizedImage = createMockImage(1920, 1080); // Large image
@@ -231,7 +232,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should switch formats when one fails to compress adequately', async () => {
-      expect(() => imageProcessor).toBeUndefined();
+      expect(imageProcessor).toBeUndefined();
 
       // Future test for format fallback:
       // const complexImage = createComplexMockImage(); // Image that compresses poorly as JPEG
@@ -257,7 +258,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should implement progressive degradation under poor conditions', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for progressive degradation:
       // const sessionId = 'degradation-test-001';
@@ -288,7 +289,7 @@ describe('Error Recovery and Fallbacks', () => {
 
   describe('Recovery Performance and Limits', () => {
     it('should not retry indefinitely and eventually give up', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future test for retry limits:
       // const sessionId = 'retry-limit-test-001';
@@ -311,7 +312,7 @@ describe('Error Recovery and Fallbacks', () => {
     });
 
     it('should maintain acceptable performance during error recovery', async () => {
-      expect(() => transmissionService).toBeUndefined();
+      expect(transmissionService).toBeUndefined();
 
       // Future performance test during recovery:
       // const sessionId = 'recovery-performance-test-001';
