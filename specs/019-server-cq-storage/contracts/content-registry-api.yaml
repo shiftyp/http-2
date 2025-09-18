@@ -1,0 +1,332 @@
+openapi: 3.0.0
+info:
+  title: Content Registry API
+  description: CQ beacon storage and discovery for disaster communications
+  version: 1.0.0
+
+servers:
+  - url: ws://localhost:8080
+    description: WebSocket signaling server
+  - url: http://localhost:8080
+    description: HTTP API endpoints
+
+paths:
+  /api/content/announce:
+    post:
+      summary: Upload CQ beacon announcement
+      description: Hybrid stations upload RF-heard beacon data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeaconUpdate'
+      responses:
+        '201':
+          description: Beacon stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnounceResponse'
+        '400':
+          description: Invalid beacon data
+        '429':
+          description: Rate limit exceeded
+        '401':
+          description: Authentication failed
+
+  /api/content/search:
+    get:
+      summary: Search content registry
+      description: Query content by hash, callsign, or metadata
+      parameters:
+        - name: hash
+          in: query
+          schema:
+            type: string
+          description: Content hash to find
+        - name: callsign
+          in: query
+          schema:
+            type: string
+          description: Filter by originating callsign
+        - name: priority
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+          description: Minimum priority tier
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsolidatedBeacon'
+
+  /api/content/batch:
+    post:
+      summary: Batch content query
+      description: Efficiently query multiple content items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hashes:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 100
+      responses:
+        '200':
+          description: Batch query results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/ConsolidatedBeacon'
+
+  /api/content/{hash}:
+    get:
+      summary: Get specific content entry
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Content entry found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsolidatedBeacon'
+        '404':
+          description: Content not found
+
+    delete:
+      summary: Remove content entry
+      description: Delete expired or invalid content
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Content deleted
+        '404':
+          description: Content not found
+        '403':
+          description: Insufficient privileges
+
+  /api/station/{callsign}/trust:
+    get:
+      summary: Get station trust score
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Station trust information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationTrust'
+
+components:
+  schemas:
+    ConsolidatedBeacon:
+      type: object
+      required:
+        - contentHash
+        - callsign
+        - priorityTier
+        - size
+        - mimeType
+        - createdAt
+        - expiresAt
+        - lastHeard
+        - paths
+      properties:
+        contentHash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+        callsign:
+          type: string
+          pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$'
+        url:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+        mimeType:
+          type: string
+        chunks:
+          type: array
+          items:
+            type: integer
+        priorityTier:
+          type: integer
+          minimum: 0
+          maximum: 5
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastHeard:
+          type: string
+          format: date-time
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/PathRecord'
+        hasWebRTC:
+          type: boolean
+        hasRFChunks:
+          type: boolean
+        metadata:
+          type: object
+
+    PathRecord:
+      type: object
+      required:
+        - path
+        - lastHeard
+        - hopCount
+        - signalQuality
+      properties:
+        path:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 7
+        lastHeard:
+          type: string
+          format: date-time
+        hopCount:
+          type: integer
+          minimum: 1
+          maximum: 7
+        signalQuality:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        qualityScore:
+          type: number
+
+    BeaconUpdate:
+      type: object
+      required:
+        - callsign
+        - signature
+        - contentHash
+        - path
+        - timestamp
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$'
+        signature:
+          type: string
+        contentHash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+        path:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          properties:
+            url:
+              type: string
+            size:
+              type: integer
+            mimeType:
+              type: string
+            chunks:
+              type: array
+              items:
+                type: integer
+            priority:
+              type: integer
+              minimum: 0
+              maximum: 5
+        signalQuality:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        timestamp:
+          type: string
+          format: date-time
+
+    StationTrust:
+      type: object
+      required:
+        - callsign
+        - trustScore
+        - beaconCount
+        - verifiedCount
+        - maxEntries
+        - isVerified
+      properties:
+        callsign:
+          type: string
+        trustScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        beaconCount:
+          type: integer
+        verifiedCount:
+          type: integer
+        conflictCount:
+          type: integer
+        maxEntries:
+          type: integer
+        isVerified:
+          type: boolean
+        canSetEmergency:
+          type: boolean
+        firstSeen:
+          type: string
+          format: date-time
+        lastActive:
+          type: string
+          format: date-time
+
+    AnnounceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        contentHash:
+          type: string
+        consolidated:
+          type: boolean
+          description: Was this merged with existing beacon
+        pathCount:
+          type: integer
+          description: Total paths after consolidation
+
+  securitySchemes:
+    stationAuth:
+      type: http
+      scheme: bearer
+      description: ECDSA signed challenge token

@@ -119,11 +119,11 @@ tests/ (312 total tests, 219 passing)
 - **Current Status**: 312 tests, 219 passing (70.2%)
 
 ## Recent Changes
-- **Transmission Mode System**: Implemented hybrid WebRTC/RF switching with automatic fallback
-- **BitTorrent Protocol**: Added chunked content distribution for RF mode with CQ beacon routing
-- **WebRTC Transport**: Direct peer-to-peer downloads with native WebSocket signaling server
-- **Mode-Adaptive Architecture**: Seamless switching between 1MB/s WebRTC and 14.4kbps RF protocols
-- **Integration Testing**: Contract and integration tests for transmission mode switching
+- **Content Registry System**: Implemented server-side CQ beacon storage with 1GB capacity and client-side 50MB cache
+- **Path Consolidation**: Added beacon deduplication achieving 80% storage reduction through path aggregation
+- **Priority Classification**: Disaster-oriented content tiers (P0-P5) with adaptive TTL and network consensus
+- **Shared Schema**: Unified ConsolidatedBeacon format between server SQLite and client IndexedDB storage
+- **Previous**: Transmission modes, BitTorrent protocol, WebRTC transport for hybrid RF/internet operation
 
 ## Component System Architecture
 - **ComponentType enum**: Defines all available component types
@@ -165,6 +165,8 @@ npm run typecheck        # Run TypeScript checks
 - **webrtc-transport**: WebRTC swarm coordination with signaling server integration
 - **transmission-mode**: Hybrid mode switching manager with automatic fallback
 - **mesh-dl-protocol**: BitTorrent-style content distribution with CQ beacon routing
+- **content-registry**: Consolidated beacon storage with path aggregation (1GB server/50MB client)
+- **priority-tiers**: Disaster-oriented content classification (P0-P5 with TTL management)
 - **qr-shortcode**: QR code and shortcode generation for connection establishment
 - **station-data**: Station data export/import with ADIF support
 - **crypto**: ECDSA signing and ECDH key exchange using Web Crypto API

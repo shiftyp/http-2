@@ -1,0 +1,872 @@
+openapi: 3.0.3
+info:
+  title: PWA Serving API
+  description: API for serving Progressive Web Application assets through the signaling server
+  version: 1.0.0
+  contact:
+    name: Ham Radio WebRTC Project
+    email: support@ham-radio-webrtc.org
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local signaling server
+  - url: https://signaling.ham-radio-webrtc.org
+    description: Production signaling server
+
+paths:
+  /:
+    get:
+      summary: Serve PWA main page
+      description: Serves the main PWA application (index.html)
+      operationId: servePWAMain
+      tags:
+        - PWA Assets
+      responses:
+        '200':
+          description: PWA main page served successfully
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: text/html; charset=utf-8
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=3600
+            ETag:
+              schema:
+                type: string
+                example: '"abc123def456"'
+            Last-Modified:
+              schema:
+                type: string
+                format: date-time
+                example: "2025-09-18T10:00:00Z"
+          content:
+            text/html:
+              schema:
+                type: string
+                description: HTML content of the PWA
+              examples:
+                pwa_index:
+                  summary: PWA index.html
+                  value: |
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                      <meta charset="UTF-8">
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <title>Ham Radio WebRTC</title>
+                      <link rel="manifest" href="/manifest.json">
+                    </head>
+                    <body>
+                      <div id="root"></div>
+                      <script src="/assets/js/main.js"></script>
+                    </body>
+                    </html>
+        '304':
+          description: Not modified (cached version is current)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+        '404':
+          description: PWA not found or not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /manifest.json:
+    get:
+      summary: Serve PWA manifest
+      description: Serves the PWA manifest file with proper MIME type
+      operationId: servePWAManifest
+      tags:
+        - PWA Assets
+      responses:
+        '200':
+          description: PWA manifest served successfully
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: application/manifest+json
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=86400
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PWAManifest'
+              examples:
+                ham_radio_manifest:
+                  summary: Ham Radio PWA Manifest
+                  value:
+                    name: "Ham Radio WebRTC"
+                    short_name: "HamRadio"
+                    description: "HTTP over Ham Radio with WebRTC support"
+                    start_url: "/"
+                    display: "standalone"
+                    background_color: "#1f2937"
+                    theme_color: "#3b82f6"
+                    orientation: "portrait-primary"
+                    icons:
+                      - src: "/assets/icons/icon-192x192.png"
+                        sizes: "192x192"
+                        type: "image/png"
+                        purpose: "any maskable"
+                      - src: "/assets/icons/icon-512x512.png"
+                        sizes: "512x512"
+                        type: "image/png"
+                        purpose: "any"
+                    categories: ["communication", "utilities"]
+                    scope: "/"
+        '304':
+          description: Not modified
+        '404':
+          description: Manifest not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sw.js:
+    get:
+      summary: Serve service worker
+      description: Serves the PWA service worker with no-cache headers
+      operationId: serveServiceWorker
+      tags:
+        - PWA Assets
+      responses:
+        '200':
+          description: Service worker served successfully
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: application/javascript
+            Cache-Control:
+              schema:
+                type: string
+                example: no-cache, no-store, must-revalidate
+            Service-Worker-Allowed:
+              schema:
+                type: string
+                example: "/"
+            Pragma:
+              schema:
+                type: string
+                example: no-cache
+            Expires:
+              schema:
+                type: string
+                example: "0"
+          content:
+            application/javascript:
+              schema:
+                type: string
+                description: Service worker JavaScript code
+              examples:
+                basic_sw:
+                  summary: Basic service worker
+                  value: |
+                    const CACHE_NAME = 'ham-radio-v1.0.0';
+                    const urlsToCache = [
+                      '/',
+                      '/assets/css/main.css',
+                      '/assets/js/main.js',
+                      '/manifest.json'
+                    ];
+
+                    self.addEventListener('install', event => {
+                      event.waitUntil(
+                        caches.open(CACHE_NAME)
+                          .then(cache => cache.addAll(urlsToCache))
+                      );
+                    });
+        '404':
+          description: Service worker not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /assets/{asset_path}:
+    get:
+      summary: Serve PWA static assets
+      description: Serves static assets (CSS, JS, images) with appropriate caching headers
+      operationId: servePWAAsset
+      tags:
+        - PWA Assets
+      parameters:
+        - name: asset_path
+          in: path
+          required: true
+          description: Path to the asset file
+          schema:
+            type: string
+          examples:
+            css_file:
+              summary: CSS file
+              value: "css/main.css"
+            js_file:
+              summary: JavaScript file
+              value: "js/main.js"
+            image_file:
+              summary: Image file
+              value: "icons/icon-192x192.png"
+      responses:
+        '200':
+          description: Asset served successfully
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                description: MIME type based on file extension
+              examples:
+                css:
+                  value: "text/css"
+                js:
+                  value: "application/javascript"
+                png:
+                  value: "image/png"
+                svg:
+                  value: "image/svg+xml"
+            Cache-Control:
+              schema:
+                type: string
+                example: "public, max-age=31536000, immutable"
+            ETag:
+              schema:
+                type: string
+                example: '"def456ghi789"'
+            Content-Encoding:
+              schema:
+                type: string
+                example: "gzip"
+              description: If asset is compressed
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: Asset file content
+        '206':
+          description: Partial content (range request)
+          headers:
+            Content-Range:
+              schema:
+                type: string
+                example: "bytes 0-1023/4096"
+            Accept-Ranges:
+              schema:
+                type: string
+                example: "bytes"
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: Not modified (cached version is current)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+        '404':
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '416':
+          description: Range not satisfiable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/pwa/info:
+    get:
+      summary: Get PWA information
+      description: Returns metadata about the currently served PWA
+      operationId: getPWAInfo
+      tags:
+        - PWA Management
+      responses:
+        '200':
+          description: PWA information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PWAInfo'
+              examples:
+                pwa_info:
+                  summary: PWA information
+                  value:
+                    version: "2.1.0"
+                    name: "Ham Radio WebRTC"
+                    buildDate: "2025-09-18T10:00:00Z"
+                    assetsPath: "/opt/ham-radio/pwa-assets"
+                    totalSize: 8388608
+                    totalFiles: 47
+                    manifestValid: true
+                    serviceWorkerValid: true
+                    offlineCapable: true
+                    lastUpdate: "2025-09-18T10:00:00Z"
+                    assetCounts:
+                      html: 1
+                      css: 3
+                      js: 8
+                      images: 15
+                      fonts: 4
+                      other: 16
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/pwa/health:
+    get:
+      summary: Check PWA serving health
+      description: Verifies that PWA assets are properly configured and accessible
+      operationId: checkPWAHealth
+      tags:
+        - PWA Management
+      responses:
+        '200':
+          description: PWA health check completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PWAHealthCheck'
+              examples:
+                healthy_pwa:
+                  summary: Healthy PWA
+                  value:
+                    healthy: true
+                    checkedAt: "2025-09-18T10:30:00Z"
+                    checks:
+                      - name: "Index file exists"
+                        status: "pass"
+                        message: "index.html found and accessible"
+                      - name: "Manifest valid"
+                        status: "pass"
+                        message: "manifest.json is valid JSON"
+                      - name: "Service worker exists"
+                        status: "pass"
+                        message: "sw.js found and accessible"
+                      - name: "Assets directory"
+                        status: "pass"
+                        message: "Assets directory accessible"
+                      - name: "Required icons"
+                        status: "pass"
+                        message: "All required icon sizes present"
+                    warnings: []
+                    errors: []
+                unhealthy_pwa:
+                  summary: Unhealthy PWA
+                  value:
+                    healthy: false
+                    checkedAt: "2025-09-18T10:30:00Z"
+                    checks:
+                      - name: "Index file exists"
+                        status: "fail"
+                        message: "index.html not found"
+                      - name: "Manifest valid"
+                        status: "pass"
+                        message: "manifest.json is valid JSON"
+                    warnings:
+                      - "Service worker cache may be stale"
+                    errors:
+                      - "Missing index.html file"
+                      - "Assets directory not readable"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/pwa/update:
+    post:
+      summary: Update PWA assets
+      description: Triggers an update of PWA assets from the latest build
+      operationId: updatePWAAssets
+      tags:
+        - PWA Management
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PWAUpdateRequest'
+            examples:
+              force_update:
+                summary: Force update
+                value:
+                  force: true
+                  clearCache: true
+                  restartRequired: false
+      responses:
+        '200':
+          description: PWA update completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PWAUpdateResult'
+              examples:
+                successful_update:
+                  summary: Successful update
+                  value:
+                    success: true
+                    message: "PWA assets updated successfully"
+                    updatedAt: "2025-09-18T10:45:00Z"
+                    previousVersion: "2.0.0"
+                    newVersion: "2.1.0"
+                    filesUpdated: 12
+                    restartRequired: false
+                    cacheCleared: true
+        '400':
+          description: Invalid update request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Update already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    PWAManifest:
+      type: object
+      required:
+        - name
+        - short_name
+        - start_url
+        - display
+        - icons
+      properties:
+        name:
+          type: string
+          description: Full application name
+          example: "Ham Radio WebRTC"
+        short_name:
+          type: string
+          description: Short application name
+          example: "HamRadio"
+        description:
+          type: string
+          description: Application description
+          example: "HTTP over Ham Radio with WebRTC support"
+        start_url:
+          type: string
+          description: Application start URL
+          example: "/"
+        display:
+          type: string
+          enum: [fullscreen, standalone, minimal-ui, browser]
+          description: Display mode
+          example: "standalone"
+        background_color:
+          type: string
+          description: Background color (hex)
+          pattern: '^#[0-9a-fA-F]{6}$'
+          example: "#1f2937"
+        theme_color:
+          type: string
+          description: Theme color (hex)
+          pattern: '^#[0-9a-fA-F]{6}$'
+          example: "#3b82f6"
+        orientation:
+          type: string
+          enum: [any, natural, landscape, portrait, portrait-primary, portrait-secondary, landscape-primary, landscape-secondary]
+          description: Preferred orientation
+          example: "portrait-primary"
+        scope:
+          type: string
+          description: Application scope
+          example: "/"
+        icons:
+          type: array
+          description: Application icons
+          items:
+            $ref: '#/components/schemas/PWAIcon'
+        categories:
+          type: array
+          description: Application categories
+          items:
+            type: string
+          example: ["communication", "utilities"]
+
+    PWAIcon:
+      type: object
+      required:
+        - src
+        - sizes
+        - type
+      properties:
+        src:
+          type: string
+          description: Icon URL
+          example: "/assets/icons/icon-192x192.png"
+        sizes:
+          type: string
+          description: Icon sizes
+          pattern: '^[0-9]+x[0-9]+$'
+          example: "192x192"
+        type:
+          type: string
+          description: MIME type
+          example: "image/png"
+        purpose:
+          type: string
+          description: Icon purpose
+          example: "any maskable"
+
+    PWAInfo:
+      type: object
+      required:
+        - version
+        - name
+        - buildDate
+        - assetsPath
+        - totalSize
+        - totalFiles
+        - manifestValid
+        - serviceWorkerValid
+        - offlineCapable
+      properties:
+        version:
+          type: string
+          description: PWA version
+          example: "2.1.0"
+        name:
+          type: string
+          description: PWA name
+          example: "Ham Radio WebRTC"
+        buildDate:
+          type: string
+          format: date-time
+          description: PWA build date
+          example: "2025-09-18T10:00:00Z"
+        assetsPath:
+          type: string
+          description: Assets directory path
+          example: "/opt/ham-radio/pwa-assets"
+        totalSize:
+          type: integer
+          description: Total assets size in bytes
+          example: 8388608
+        totalFiles:
+          type: integer
+          description: Total number of asset files
+          example: 47
+        manifestValid:
+          type: boolean
+          description: Whether manifest is valid
+          example: true
+        serviceWorkerValid:
+          type: boolean
+          description: Whether service worker is valid
+          example: true
+        offlineCapable:
+          type: boolean
+          description: Whether PWA can work offline
+          example: true
+        lastUpdate:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2025-09-18T10:00:00Z"
+        assetCounts:
+          type: object
+          description: Count of assets by type
+          properties:
+            html:
+              type: integer
+              example: 1
+            css:
+              type: integer
+              example: 3
+            js:
+              type: integer
+              example: 8
+            images:
+              type: integer
+              example: 15
+            fonts:
+              type: integer
+              example: 4
+            other:
+              type: integer
+              example: 16
+
+    PWAHealthCheck:
+      type: object
+      required:
+        - healthy
+        - checkedAt
+        - checks
+        - warnings
+        - errors
+      properties:
+        healthy:
+          type: boolean
+          description: Overall health status
+          example: true
+        checkedAt:
+          type: string
+          format: date-time
+          description: Health check timestamp
+          example: "2025-09-18T10:30:00Z"
+        checks:
+          type: array
+          description: Individual health checks
+          items:
+            $ref: '#/components/schemas/HealthCheckResult'
+        warnings:
+          type: array
+          description: Warning messages
+          items:
+            type: string
+          example: ["Service worker cache may be stale"]
+        errors:
+          type: array
+          description: Error messages
+          items:
+            type: string
+          example: ["Missing index.html file"]
+
+    HealthCheckResult:
+      type: object
+      required:
+        - name
+        - status
+        - message
+      properties:
+        name:
+          type: string
+          description: Check name
+          example: "Index file exists"
+        status:
+          type: string
+          enum: [pass, fail, warning]
+          description: Check status
+          example: "pass"
+        message:
+          type: string
+          description: Check result message
+          example: "index.html found and accessible"
+        details:
+          type: object
+          description: Additional check details
+          additionalProperties: true
+
+    PWAUpdateRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          description: Force update even if versions match
+          default: false
+          example: true
+        clearCache:
+          type: boolean
+          description: Clear browser caches after update
+          default: true
+          example: true
+        restartRequired:
+          type: boolean
+          description: Whether server restart is required
+          default: false
+          example: false
+        sourcePath:
+          type: string
+          description: Path to new PWA assets (optional)
+          example: "/tmp/new-pwa-assets"
+
+    PWAUpdateResult:
+      type: object
+      required:
+        - success
+        - message
+        - updatedAt
+      properties:
+        success:
+          type: boolean
+          description: Whether update succeeded
+          example: true
+        message:
+          type: string
+          description: Update result message
+          example: "PWA assets updated successfully"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Update timestamp
+          example: "2025-09-18T10:45:00Z"
+        previousVersion:
+          type: string
+          description: Previous PWA version
+          example: "2.0.0"
+        newVersion:
+          type: string
+          description: New PWA version
+          example: "2.1.0"
+        filesUpdated:
+          type: integer
+          description: Number of files updated
+          example: 12
+        restartRequired:
+          type: boolean
+          description: Whether server restart is needed
+          example: false
+        cacheCleared:
+          type: boolean
+          description: Whether caches were cleared
+          example: true
+        errors:
+          type: array
+          description: Update errors (if any)
+          items:
+            type: string
+
+    Error:
+      type: object
+      required:
+        - error
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Asset not found"
+        code:
+          type: string
+          description: Error code
+          example: "ASSET_NOT_FOUND"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2025-09-18T10:45:00Z"
+        path:
+          type: string
+          description: Requested path that caused error
+          example: "/assets/missing-file.js"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  parameters:
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: ETag for conditional requests
+      schema:
+        type: string
+      example: '"abc123def456"'
+
+    IfModifiedSince:
+      name: If-Modified-Since
+      in: header
+      description: Date for conditional requests
+      schema:
+        type: string
+        format: date-time
+      example: "2025-09-18T09:00:00Z"
+
+    Range:
+      name: Range
+      in: header
+      description: Range request for partial content
+      schema:
+        type: string
+        pattern: '^bytes=\\d+-\\d*$'
+      example: "bytes=0-1023"
+
+  responses:
+    NotModified:
+      description: Resource has not been modified
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+        ETag:
+          schema:
+            type: string
+
+    PartialContent:
+      description: Partial content response
+      headers:
+        Content-Range:
+          schema:
+            type: string
+        Accept-Ranges:
+          schema:
+            type: string
+        Content-Length:
+          schema:
+            type: integer
+
+tags:
+  - name: PWA Assets
+    description: Operations for serving PWA assets
+  - name: PWA Management
+    description: Operations for managing PWA configuration and health

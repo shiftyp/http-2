@@ -8,6 +8,7 @@ import './setup';
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { WaterfallDisplay } from '../../lib/sdr-support/waterfall-display';
 
 // Mock Web APIs for testing environment
 const mockCanvas = {
@@ -114,17 +115,12 @@ describe('Waterfall Display Integration Tests', () => {
         enabled: true
       };
 
-      mockWaterfallDisplay.initialize.mockResolvedValue({
-        webglSupported: true,
-        shadersCompiled: true,
-        texturesCreated: true,
-        bufferSize: 1024
-      });
+      mockWebGLContext.createShader.mockReturnValue('shader-id');
+      mockWebGLContext.createProgram.mockReturnValue('program-id');
+      mockWebGLContext.getProgramParameter.mockReturnValue(true);
+      mockWebGLContext.getShaderParameter.mockReturnValue(true);
 
-      // This will fail until WaterfallDisplay is implemented
-      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = mockWaterfallDisplay;
-
+      const display = new WaterfallDisplay(mockCanvas as any);
       const initResult = await display.initialize(config);
 
       expect(initResult.webglSupported).toBe(true);
@@ -136,8 +132,7 @@ describe('Waterfall Display Integration Tests', () => {
     it('should handle WebGL context creation failure gracefully', async () => {
       mockCanvas.getContext.mockReturnValue(null); // WebGL not supported
 
-      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = mockWaterfallDisplay;
+      const display = new WaterfallDisplay(mockCanvas as any);
 
       await expect(display.initialize({}))
         .rejects.toThrow('WebGL not supported');
@@ -150,8 +145,7 @@ describe('Waterfall Display Integration Tests', () => {
         intensityRange: { min: -50, max: -100 } // Invalid range
       };
 
-      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = mockWaterfallDisplay;
+      const display = new WaterfallDisplay(mockCanvas as any);
 
       await expect(display.initialize(invalidConfig))
         .rejects.toThrow('Invalid configuration');
@@ -182,9 +176,10 @@ describe('Waterfall Display Integration Tests', () => {
 
       mockWebGLContext.createShader.mockReturnValue('shader-id');
       mockWebGLContext.createProgram.mockReturnValue('program-id');
+      mockWebGLContext.getProgramParameter.mockReturnValue(true);
+      mockWebGLContext.getShaderParameter.mockReturnValue(true);
 
-      // const { WaterfallDisplay } = await import('../../src/lib/sdr-support/waterfall-display');
-      const display = mockWaterfallDisplay;
+      const display = new WaterfallDisplay(mockCanvas as any);
 
       await display.initialize({});
 

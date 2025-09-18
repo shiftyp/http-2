@@ -62,7 +62,7 @@ class MockIDBDatabase {
             const actualKey = key || value.id || value.path || value.callsign || Date.now();
             store.set(actualKey, value);
             req.result = actualKey;
-            setTimeout(() => req.onsuccess?.({ target: { result: actualKey } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: actualKey } }));
             return req;
           }),
           put: vi.fn((value: any, key?: any) => {
@@ -70,44 +70,44 @@ class MockIDBDatabase {
             const actualKey = key || value.id || value.path || value.callsign || Date.now();
             store.set(actualKey, value);
             req.result = actualKey;
-            setTimeout(() => req.onsuccess?.({ target: { result: actualKey } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: actualKey } }));
             return req;
           }),
           get: vi.fn((key: any) => {
             const req = new MockIDBRequest();
             req.result = store.get(key) || null;
-            setTimeout(() => req.onsuccess?.({ target: { result: req.result } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: req.result } }));
             return req;
           }),
           getAll: vi.fn(() => {
             const req = new MockIDBRequest();
             req.result = Array.from(store.values());
-            setTimeout(() => req.onsuccess?.({ target: { result: req.result } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: req.result } }));
             return req;
           }),
           delete: vi.fn((key: any) => {
             const req = new MockIDBRequest();
             store.delete(key);
-            setTimeout(() => req.onsuccess?.({ target: { result: undefined } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: undefined } }));
             return req;
           }),
           clear: vi.fn(() => {
             const req = new MockIDBRequest();
             store.clear();
-            setTimeout(() => req.onsuccess?.({ target: { result: undefined } }), 0);
+            Promise.resolve().then(() => req.onsuccess?.({ target: { result: undefined } }));
             return req;
           }),
           index: vi.fn((indexName: string) => ({
             getAll: vi.fn(() => {
               const req = new MockIDBRequest();
               req.result = Array.from(store.values());
-              setTimeout(() => req.onsuccess?.({ target: { result: req.result } }), 0);
+              Promise.resolve().then(() => req.onsuccess?.({ target: { result: req.result } }));
               return req;
             }),
             openCursor: vi.fn(() => {
               const req = new MockIDBRequest();
               req.result = null;
-              setTimeout(() => req.onsuccess?.({ target: { result: null } }), 0);
+              Promise.resolve().then(() => req.onsuccess?.({ target: { result: null } }));
               return req;
             })
           }))
@@ -140,25 +140,25 @@ global.indexedDB = {
     req.result = db;
 
     // Ensure the request object has the expected properties
-    setTimeout(() => {
+    Promise.resolve().then(() => {
       if (req.onupgradeneeded) {
         req.onupgradeneeded({ target: { result: db } });
       }
       if (req.onsuccess) {
         req.onsuccess({ target: { result: db } });
       }
-    }, 0);
+    });
 
     console.log('Returning MockIDBRequest:', req);
     return req;
   },
   deleteDatabase: () => {
     const req = new MockIDBRequest();
-    setTimeout(() => {
+    Promise.resolve().then(() => {
       if (req.onsuccess) {
         req.onsuccess({ target: { result: null } });
       }
-    }, 0);
+    });
     return req;
   },
   databases: () => Promise.resolve([])

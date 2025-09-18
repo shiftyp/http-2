@@ -31,6 +31,25 @@ describe('Adaptive Decoding Chain Integration', () => {
       compressor,
       crypto
     });
+
+    // Mock crypto manager to avoid indexedDB issues
+    const mockKeyPair = {
+      publicKey: {} as CryptoKey,
+      privateKey: {} as CryptoKey,
+      publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMOCK\n-----END PUBLIC KEY-----',
+      callsign: 'KA1ABC',
+      created: Date.now(),
+      expires: Date.now() + 365 * 24 * 60 * 60 * 1000
+    };
+
+    (crypto as any).keyPair = mockKeyPair;
+    vi.spyOn(crypto, 'generateKeyPair').mockImplementation(async (callsign: string) => {
+      (crypto as any).keyPair = { ...mockKeyPair, callsign };
+      return { ...mockKeyPair, callsign };
+    });
+    vi.spyOn(crypto, 'sign').mockResolvedValue('mock-signature');
+    vi.spyOn(crypto, 'verify').mockResolvedValue(true);
+    vi.spyOn(crypto, 'close').mockResolvedValue();
   });
 
   /**

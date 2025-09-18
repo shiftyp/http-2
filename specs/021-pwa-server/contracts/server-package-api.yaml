@@ -1,0 +1,802 @@
+openapi: 3.0.3
+info:
+  title: Server Package Download API
+  description: API for downloading server packages containing platform binaries and PWA assets
+  version: 1.0.0
+  contact:
+    name: Ham Radio WebRTC Project
+    email: support@ham-radio-webrtc.org
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local signaling server
+  - url: https://signaling.ham-radio-webrtc.org
+    description: Production signaling server
+
+paths:
+  /api/packages/info:
+    get:
+      summary: Get server package information
+      description: Returns metadata about the available server package including size, version, and platform support
+      operationId: getPackageInfo
+      tags:
+        - Package Information
+      responses:
+        '200':
+          description: Package information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageInfo'
+              examples:
+                standard_package:
+                  summary: Standard server package
+                  value:
+                    id: "ham-radio-server-v1.0.0"
+                    name: "Ham Radio WebRTC Server"
+                    version: "1.0.0"
+                    description: "Complete server package with PWA and multi-platform binaries"
+                    size: 52428800
+                    sizeFormatted: "50.0 MB"
+                    checksum: "sha256:a1b2c3d4e5f6..."
+                    createdAt: "2025-09-18T10:30:00Z"
+                    platforms:
+                      - platform: "linux"
+                        architecture: "x64"
+                        size: 12582912
+                      - platform: "linux"
+                        architecture: "arm64"
+                        size: 11534336
+                      - platform: "macos"
+                        architecture: "x64"
+                        size: 13631488
+                      - platform: "macos"
+                        architecture: "arm64"
+                        size: 12058624
+                      - platform: "windows"
+                        architecture: "x64"
+                        size: 14680064
+                    pwaVersion: "2.1.0"
+                    pwaSize: 8388608
+                    emergencyCapable: true
+                    downloadUrl: "/api/packages/download"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/packages/download:
+    get:
+      summary: Download server package
+      description: Downloads the complete server package with all platform binaries and PWA assets
+      operationId: downloadPackage
+      tags:
+        - Package Download
+      parameters:
+        - name: format
+          in: query
+          description: Package format (currently only zip supported)
+          required: false
+          schema:
+            type: string
+            enum: [zip]
+            default: zip
+        - name: include
+          in: query
+          description: Components to include in package
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [binaries, pwa, docs, scripts]
+            default: [binaries, pwa, docs, scripts]
+        - name: platforms
+          in: query
+          description: Specific platforms to include (leave empty for all)
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64]
+      responses:
+        '200':
+          description: Package download started
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: application/zip
+            Content-Length:
+              schema:
+                type: integer
+                description: Package size in bytes
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="ham-radio-server-v1.0.0.zip"
+            X-Package-Version:
+              schema:
+                type: string
+                description: Package version
+            X-Package-Checksum:
+              schema:
+                type: string
+                description: SHA-256 checksum of the package
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+                description: Server package ZIP file
+        '206':
+          description: Partial content (resumable download)
+          headers:
+            Content-Range:
+              schema:
+                type: string
+                example: bytes 0-1023/52428800
+            Accept-Ranges:
+              schema:
+                type: string
+                example: bytes
+            Content-Length:
+              schema:
+                type: integer
+            X-Package-Version:
+              schema:
+                type: string
+            X-Package-Checksum:
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '416':
+          description: Range not satisfiable (invalid range request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/packages/verify:
+    post:
+      summary: Verify package integrity
+      description: Verifies the integrity of a downloaded package using checksums
+      operationId: verifyPackage
+      tags:
+        - Package Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationRequest'
+            examples:
+              sha256_verification:
+                summary: SHA-256 checksum verification
+                value:
+                  checksum: "a1b2c3d4e5f6789..."
+                  algorithm: "sha256"
+                  packageId: "ham-radio-server-v1.0.0"
+      responses:
+        '200':
+          description: Package verification completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationResult'
+              examples:
+                valid_package:
+                  summary: Package verification successful
+                  value:
+                    valid: true
+                    packageId: "ham-radio-server-v1.0.0"
+                    algorithm: "sha256"
+                    expectedChecksum: "a1b2c3d4e5f6789..."
+                    actualChecksum: "a1b2c3d4e5f6789..."
+                    verifiedAt: "2025-09-18T10:45:00Z"
+                    message: "Package integrity verified successfully"
+                invalid_package:
+                  summary: Package verification failed
+                  value:
+                    valid: false
+                    packageId: "ham-radio-server-v1.0.0"
+                    algorithm: "sha256"
+                    expectedChecksum: "a1b2c3d4e5f6789..."
+                    actualChecksum: "x9y8z7w6v5u4321..."
+                    verifiedAt: "2025-09-18T10:45:00Z"
+                    message: "Package integrity verification failed - checksums do not match"
+                    recommendation: "Please re-download the package"
+        '400':
+          description: Invalid verification request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Package not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/packages/manifest:
+    get:
+      summary: Get package manifest
+      description: Returns detailed manifest of package contents including file structure and installation instructions
+      operationId: getPackageManifest
+      tags:
+        - Package Information
+      responses:
+        '200':
+          description: Package manifest retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageManifest'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    PackageInfo:
+      type: object
+      required:
+        - id
+        - name
+        - version
+        - description
+        - size
+        - checksum
+        - createdAt
+        - platforms
+        - pwaVersion
+        - emergencyCapable
+        - downloadUrl
+      properties:
+        id:
+          type: string
+          description: Unique package identifier
+          example: "ham-radio-server-v1.0.0"
+        name:
+          type: string
+          description: Human-readable package name
+          example: "Ham Radio WebRTC Server"
+        version:
+          type: string
+          description: Package version (semantic versioning)
+          pattern: '^\\d+\\.\\d+\\.\\d+$'
+          example: "1.0.0"
+        description:
+          type: string
+          description: Package description
+          example: "Complete server package with PWA and multi-platform binaries"
+        size:
+          type: integer
+          description: Total package size in bytes
+          minimum: 0
+          example: 52428800
+        sizeFormatted:
+          type: string
+          description: Human-readable size
+          example: "50.0 MB"
+        checksum:
+          type: string
+          description: SHA-256 checksum for integrity verification
+          pattern: '^sha256:[a-f0-9]{64}$'
+          example: "sha256:a1b2c3d4e5f6789..."
+        createdAt:
+          type: string
+          format: date-time
+          description: Package creation timestamp
+          example: "2025-09-18T10:30:00Z"
+        platforms:
+          type: array
+          description: Supported platforms and architectures
+          items:
+            $ref: '#/components/schemas/PlatformInfo'
+        pwaVersion:
+          type: string
+          description: Included PWA version
+          example: "2.1.0"
+        pwaSize:
+          type: integer
+          description: PWA assets size in bytes
+          example: 8388608
+        emergencyCapable:
+          type: boolean
+          description: Whether package supports emergency deployment
+          example: true
+        downloadUrl:
+          type: string
+          description: Package download endpoint
+          example: "/api/packages/download"
+
+    PlatformInfo:
+      type: object
+      required:
+        - platform
+        - architecture
+        - size
+      properties:
+        platform:
+          type: string
+          enum: [linux, macos, windows]
+          description: Operating system
+          example: "linux"
+        architecture:
+          type: string
+          enum: [x64, arm64]
+          description: CPU architecture
+          example: "x64"
+        size:
+          type: integer
+          description: Binary size in bytes
+          minimum: 0
+          example: 12582912
+        filename:
+          type: string
+          description: Binary filename
+          example: "signaling-server"
+        permissions:
+          type: string
+          description: Required file permissions (Unix systems)
+          example: "755"
+
+    VerificationRequest:
+      type: object
+      required:
+        - checksum
+        - algorithm
+      properties:
+        checksum:
+          type: string
+          description: Checksum to verify against
+          example: "a1b2c3d4e5f6789..."
+        algorithm:
+          type: string
+          enum: [sha256, sha384, sha512]
+          description: Checksum algorithm
+          example: "sha256"
+        packageId:
+          type: string
+          description: Package identifier (optional)
+          example: "ham-radio-server-v1.0.0"
+
+    VerificationResult:
+      type: object
+      required:
+        - valid
+        - algorithm
+        - expectedChecksum
+        - actualChecksum
+        - verifiedAt
+        - message
+      properties:
+        valid:
+          type: boolean
+          description: Whether verification passed
+          example: true
+        packageId:
+          type: string
+          description: Verified package identifier
+          example: "ham-radio-server-v1.0.0"
+        algorithm:
+          type: string
+          description: Verification algorithm used
+          example: "sha256"
+        expectedChecksum:
+          type: string
+          description: Expected checksum value
+          example: "a1b2c3d4e5f6789..."
+        actualChecksum:
+          type: string
+          description: Actual calculated checksum
+          example: "a1b2c3d4e5f6789..."
+        verifiedAt:
+          type: string
+          format: date-time
+          description: Verification timestamp
+          example: "2025-09-18T10:45:00Z"
+        message:
+          type: string
+          description: Verification result message
+          example: "Package integrity verified successfully"
+        recommendation:
+          type: string
+          description: Recommended action if verification failed
+          example: "Please re-download the package"
+
+    PackageManifest:
+      type: object
+      required:
+        - manifestVersion
+        - packageInfo
+        - fileStructure
+        - installationInstructions
+        - systemRequirements
+      properties:
+        manifestVersion:
+          type: string
+          description: Manifest format version
+          example: "1.0.0"
+        packageInfo:
+          $ref: '#/components/schemas/PackageInfo'
+        fileStructure:
+          $ref: '#/components/schemas/FileStructure'
+        installationInstructions:
+          $ref: '#/components/schemas/InstallationInstructions'
+        systemRequirements:
+          $ref: '#/components/schemas/SystemRequirements'
+        buildInfo:
+          $ref: '#/components/schemas/BuildInfo'
+
+    FileStructure:
+      type: object
+      required:
+        - root
+        - binaries
+        - pwaAssets
+      properties:
+        root:
+          type: string
+          description: Root directory name
+          example: "ham-radio-server"
+        binaries:
+          type: object
+          description: Binary files by platform
+          additionalProperties:
+            $ref: '#/components/schemas/FileDescriptor'
+        pwaAssets:
+          type: object
+          description: PWA asset files
+          properties:
+            root:
+              type: string
+              example: "pwa-assets"
+            files:
+              type: array
+              items:
+                $ref: '#/components/schemas/FileDescriptor'
+        scripts:
+          type: array
+          description: Startup and utility scripts
+          items:
+            $ref: '#/components/schemas/FileDescriptor'
+        documentation:
+          type: array
+          description: Documentation files
+          items:
+            $ref: '#/components/schemas/FileDescriptor'
+
+    FileDescriptor:
+      type: object
+      required:
+        - name
+        - path
+        - size
+        - checksum
+      properties:
+        name:
+          type: string
+          description: Filename
+          example: "signaling-server"
+        path:
+          type: string
+          description: Relative path within package
+          example: "binaries/linux-x64/signaling-server"
+        size:
+          type: integer
+          description: File size in bytes
+          minimum: 0
+          example: 12582912
+        checksum:
+          type: string
+          description: File checksum
+          example: "sha256:b2c3d4e5f6g7..."
+        mimeType:
+          type: string
+          description: MIME type
+          example: "application/octet-stream"
+        permissions:
+          type: string
+          description: File permissions (Unix systems)
+          example: "755"
+        executable:
+          type: boolean
+          description: Whether file is executable
+          example: true
+
+    InstallationInstructions:
+      type: object
+      required:
+        - general
+        - platformSpecific
+      properties:
+        general:
+          type: array
+          description: General installation steps
+          items:
+            $ref: '#/components/schemas/InstallationStep'
+        platformSpecific:
+          type: object
+          description: Platform-specific instructions
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InstallationStep'
+        verification:
+          type: array
+          description: Post-installation verification steps
+          items:
+            $ref: '#/components/schemas/VerificationStep'
+
+    InstallationStep:
+      type: object
+      required:
+        - order
+        - description
+        - type
+      properties:
+        order:
+          type: integer
+          description: Step order
+          minimum: 1
+          example: 1
+        description:
+          type: string
+          description: Step description
+          example: "Extract package contents to desired directory"
+        command:
+          type: string
+          description: Command to execute (if applicable)
+          example: "unzip ham-radio-server.zip"
+        expectedResult:
+          type: string
+          description: Expected outcome
+          example: "Files extracted successfully"
+        type:
+          type: string
+          enum: [extract, copy, execute, configure, verify]
+          description: Step type
+          example: "extract"
+
+    VerificationStep:
+      type: object
+      required:
+        - name
+        - command
+        - expectedOutput
+      properties:
+        name:
+          type: string
+          description: Verification name
+          example: "Server startup test"
+        command:
+          type: string
+          description: Verification command
+          example: "./signaling-server --version"
+        expectedOutput:
+          type: string
+          description: Expected output pattern
+          example: "Ham Radio WebRTC Signaling Server v1.0.0"
+        onFailure:
+          type: string
+          description: Failure remediation
+          example: "Check file permissions and try again"
+
+    SystemRequirements:
+      type: object
+      required:
+        - operatingSystems
+        - memory
+        - diskSpace
+      properties:
+        operatingSystems:
+          type: array
+          description: Supported operating systems
+          items:
+            $ref: '#/components/schemas/OSRequirement'
+        memory:
+          $ref: '#/components/schemas/MemoryRequirement'
+        diskSpace:
+          $ref: '#/components/schemas/DiskSpaceRequirement'
+        network:
+          $ref: '#/components/schemas/NetworkRequirement'
+
+    OSRequirement:
+      type: object
+      required:
+        - os
+        - minVersion
+        - architectures
+      properties:
+        os:
+          type: string
+          enum: [Linux, macOS, Windows]
+          example: "Linux"
+        minVersion:
+          type: string
+          example: "Ubuntu 20.04 / CentOS 8"
+        architectures:
+          type: array
+          items:
+            type: string
+            enum: [x64, arm64]
+          example: ["x64", "arm64"]
+        notes:
+          type: string
+          example: "Requires glibc 2.28 or newer"
+
+    MemoryRequirement:
+      type: object
+      required:
+        - minimum
+        - recommended
+      properties:
+        minimum:
+          type: integer
+          description: Minimum RAM in MB
+          example: 512
+        recommended:
+          type: integer
+          description: Recommended RAM in MB
+          example: 1024
+        notes:
+          type: string
+          example: "Additional memory needed for large mesh networks"
+
+    DiskSpaceRequirement:
+      type: object
+      required:
+        - minimum
+        - recommended
+      properties:
+        minimum:
+          type: integer
+          description: Minimum disk space in MB
+          example: 100
+        recommended:
+          type: integer
+          description: Recommended disk space in MB
+          example: 500
+        additionalSpace:
+          type: integer
+          description: Additional space for data in MB
+          example: 1000
+        notes:
+          type: string
+          example: "Space for logs, database, and cached content"
+
+    NetworkRequirement:
+      type: object
+      required:
+        - ports
+        - protocols
+        - offlineCapable
+      properties:
+        ports:
+          type: array
+          description: Required network ports
+          items:
+            type: integer
+          example: [8080]
+        protocols:
+          type: array
+          description: Network protocols used
+          items:
+            type: string
+          example: ["HTTP", "WebSocket"]
+        firewallNotes:
+          type: string
+          example: "Port 8080 must be accessible for client connections"
+        offlineCapable:
+          type: boolean
+          description: Can operate without internet
+          example: true
+
+    BuildInfo:
+      type: object
+      required:
+        - buildDate
+        - sourceVersion
+        - nodeVersion
+      properties:
+        buildDate:
+          type: string
+          format: date-time
+          description: Build timestamp
+          example: "2025-09-18T10:00:00Z"
+        sourceVersion:
+          type: string
+          description: Source code version/commit
+          example: "v1.0.0-abc123"
+        nodeVersion:
+          type: string
+          description: Node.js version used
+          example: "18.17.0"
+        pkgVersion:
+          type: string
+          description: PKG version used
+          example: "5.8.1"
+        builder:
+          type: string
+          description: Build environment
+          example: "GitHub Actions"
+        dependencies:
+          type: object
+          description: Build dependencies
+          additionalProperties:
+            type: string
+          example:
+            express: "4.18.2"
+            ws: "8.14.2"
+
+    Error:
+      type: object
+      required:
+        - error
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Package not found"
+        code:
+          type: string
+          description: Error code
+          example: "PACKAGE_NOT_FOUND"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2025-09-18T10:45:00Z"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Package Information
+    description: Operations for retrieving package metadata
+  - name: Package Download
+    description: Operations for downloading server packages
+  - name: Package Verification
+    description: Operations for verifying package integrity

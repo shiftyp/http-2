@@ -1,0 +1,570 @@
+openapi: 3.0.3
+info:
+  title: CAPTCHA API
+  description: API for generating and verifying radio-optimized CAPTCHA challenges
+  version: 1.0.0
+  contact:
+    name: Amateur Radio HTTP Project
+
+servers:
+  - url: https://signaling.example.com/api
+    description: CAPTCHA server
+
+paths:
+  /captcha/generate:
+    post:
+      summary: Generate CAPTCHA challenge
+      description: Generate a new radio-optimized CAPTCHA challenge
+      operationId: generateCaptcha
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                callsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Requesting callsign (for rate limiting)
+                difficulty:
+                  type: string
+                  enum: [easy, medium, hard]
+                  default: medium
+                  description: Challenge difficulty level
+                category:
+                  type: string
+                  enum: [math, ham_knowledge, pattern, geography, any]
+                  default: any
+                  description: Preferred challenge category
+                excludeUsed:
+                  type: boolean
+                  default: true
+                  description: Exclude challenges already used by this callsign
+              required:
+                - callsign
+      responses:
+        '200':
+          description: CAPTCHA challenge generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAPTCHAChallenge'
+        '429':
+          description: Rate limit exceeded - too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captcha/{challengeId}/verify:
+    post:
+      summary: Verify CAPTCHA solution
+      description: Verify a submitted CAPTCHA solution
+      operationId: verifyCaptcha
+      parameters:
+        - name: challengeId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: CAPTCHA challenge identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answer:
+                  type: string
+                  description: Submitted answer
+                solverCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Callsign of solver
+                certificateId:
+                  type: string
+                  description: Certificate used for signing
+                signature:
+                  type: string
+                  description: Digital signature of solution
+              required:
+                - answer
+                - solverCallsign
+                - signature
+      responses:
+        '200':
+          description: CAPTCHA verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAPTCHAVerificationResult'
+        '404':
+          description: Challenge not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid verification request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captcha/{challengeId}:
+    get:
+      summary: Get CAPTCHA challenge details
+      description: Retrieve details about a specific CAPTCHA challenge
+      operationId: getCaptchaChallenge
+      parameters:
+        - name: challengeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CAPTCHA challenge details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAPTCHAChallenge'
+        '404':
+          description: Challenge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captcha/pool:
+    get:
+      summary: Get challenge pool statistics
+      description: Get statistics about the server's CAPTCHA challenge pool
+      operationId: getCaptchaPoolStats
+      responses:
+        '200':
+          description: Challenge pool statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengePoolStats'
+        '401':
+          description: Unauthorized - server operator access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Add custom CAPTCHA challenge
+      description: Add a custom challenge to the server's pool
+      operationId: addCustomChallenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomChallengeCreate'
+      responses:
+        '201':
+          description: Custom challenge added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAPTCHAChallenge'
+        '400':
+          description: Invalid challenge data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - server operator access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captcha/solutions/{solutionId}:
+    get:
+      summary: Get signed solution details
+      description: Retrieve details about a signed CAPTCHA solution
+      operationId: getSignedSolution
+      parameters:
+        - name: solutionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed solution details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedCAPTCHASolution'
+        '404':
+          description: Solution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /captcha/rate-limit/{callsign}:
+    get:
+      summary: Get rate limit status
+      description: Check rate limit status for a callsign
+      operationId: getRateLimitStatus
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      responses:
+        '200':
+          description: Rate limit status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitStatus'
+
+components:
+  schemas:
+    CAPTCHAChallenge:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique challenge identifier
+        serverCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server that generated the challenge
+        type:
+          type: string
+          enum: [math, ham_knowledge, pattern, geography, multiple_choice]
+          description: Type of challenge
+        question:
+          type: string
+          description: Challenge question text
+        answerHash:
+          type: string
+          description: SHA-256 hash of correct answer
+        options:
+          type: array
+          items:
+            type: string
+          description: Multiple choice options (if applicable)
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+          description: Challenge difficulty level
+        category:
+          type: string
+          description: Challenge category
+        generatedAt:
+          type: string
+          format: date-time
+          description: Challenge generation timestamp
+        expiresAt:
+          type: string
+          format: date-time
+          description: Challenge expiration timestamp
+        signature:
+          type: string
+          description: Server signature to prevent tampering
+        usedBy:
+          type: array
+          items:
+            type: string
+          description: Callsigns that have used this challenge
+        maxUses:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Maximum number of uses
+        compressionSize:
+          type: integer
+          description: Size in bytes when compressed for transmission
+      required:
+        - id
+        - serverCallsign
+        - type
+        - question
+        - answerHash
+        - difficulty
+        - category
+        - generatedAt
+        - expiresAt
+        - signature
+
+    CAPTCHAVerificationResult:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          description: Challenge identifier
+        isCorrect:
+          type: boolean
+          description: Whether the answer was correct
+        signedSolution:
+          $ref: '#/components/schemas/SignedCAPTCHASolution'
+        verificationDetails:
+          type: object
+          properties:
+            verifiedAt:
+              type: string
+              format: date-time
+            verifiedBy:
+              type: string
+              pattern: '^[A-Z0-9]{3,7}$'
+            signatureValid:
+              type: boolean
+            certificateValid:
+              type: boolean
+        rateLimitInfo:
+          $ref: '#/components/schemas/RateLimitStatus'
+      required:
+        - challengeId
+        - isCorrect
+
+    SignedCAPTCHASolution:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique solution identifier
+        challengeId:
+          type: string
+          description: Reference to CAPTCHA challenge
+        answer:
+          type: string
+          description: The submitted answer
+        solutionHash:
+          type: string
+          description: SHA-256 hash of the answer
+        solvedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Callsign of solver
+        signingCertificateId:
+          type: string
+          description: Certificate used to sign
+        signature:
+          type: string
+          description: Digital signature of solution
+        solvedAt:
+          type: string
+          format: date-time
+          description: Solution timestamp
+        isValid:
+          type: boolean
+          description: Whether solution is correct
+        verifiedAt:
+          type: string
+          format: date-time
+          description: Verification timestamp
+        verifiedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server that verified
+        usedForRequests:
+          type: array
+          items:
+            type: string
+          description: Certificate request IDs that used this solution
+        compressionSize:
+          type: integer
+          description: Size in bytes when compressed
+      required:
+        - id
+        - challengeId
+        - answer
+        - solvedBy
+        - signature
+        - solvedAt
+        - isValid
+
+    CustomChallengeCreate:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [math, ham_knowledge, pattern, geography, multiple_choice]
+          description: Type of challenge
+        question:
+          type: string
+          maxLength: 200
+          description: Challenge question text
+        answer:
+          type: string
+          maxLength: 100
+          description: Correct answer
+        options:
+          type: array
+          items:
+            type: string
+          minItems: 2
+          maxItems: 6
+          description: Multiple choice options (for multiple_choice type)
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+          description: Challenge difficulty level
+        category:
+          type: string
+          maxLength: 50
+          description: Challenge category
+        maxUses:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 1
+          description: Maximum number of uses
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorization
+      required:
+        - type
+        - question
+        - answer
+        - difficulty
+        - category
+
+    ChallengePoolStats:
+      type: object
+      properties:
+        totalChallenges:
+          type: integer
+          description: Total number of challenges in pool
+        challengesByCategory:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Number of challenges by category
+        challengesByDifficulty:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Number of challenges by difficulty
+        averageCompressionSize:
+          type: number
+          description: Average challenge size when compressed
+        lastGenerated:
+          type: string
+          format: date-time
+          description: When the last challenge was generated
+        usageStats:
+          type: object
+          properties:
+            totalSolutions:
+              type: integer
+            correctSolutions:
+              type: integer
+            successRate:
+              type: number
+            averageResponseTime:
+              type: number
+        poolHealth:
+          type: object
+          properties:
+            diversityScore:
+              type: number
+              description: Challenge diversity score (0-1)
+            unusedChallenges:
+              type: integer
+              description: Number of unused challenges
+            expiredChallenges:
+              type: integer
+              description: Number of expired challenges
+
+    RateLimitStatus:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        attemptsRemaining:
+          type: integer
+          description: Number of attempts remaining in current window
+        windowResetAt:
+          type: string
+          format: date-time
+          description: When the rate limit window resets
+        isLimited:
+          type: boolean
+          description: Whether the callsign is currently rate limited
+        totalAttempts:
+          type: integer
+          description: Total attempts in current window
+        successfulAttempts:
+          type: integer
+          description: Successful attempts in current window
+        delayUntilNext:
+          type: integer
+          description: Seconds to wait before next attempt (if limited)
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          enum: [RATE_LIMIT_EXCEEDED]
+          description: Error code
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retry
+        rateLimitStatus:
+          $ref: '#/components/schemas/RateLimitStatus'
+      required:
+        - error
+        - code
+        - retryAfter
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - error
+        - code
+
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for CAPTCHA service access
+
+    serverAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Server authentication for administrative operations
+
+security:
+  - apiKeyAuth: []
+  - serverAuth: []

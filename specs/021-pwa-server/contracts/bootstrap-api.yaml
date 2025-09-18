@@ -1,0 +1,1086 @@
+openapi: 3.0.3
+info:
+  title: Certificate Bootstrap API
+  description: API for bootstrapping root certificates in fresh server deployments
+  version: 1.0.0
+  contact:
+    name: Ham Radio WebRTC Project
+    email: support@ham-radio-webrtc.org
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local signaling server
+  - url: https://signaling.ham-radio-webrtc.org
+    description: Production signaling server
+
+paths:
+  /api/bootstrap/status:
+    get:
+      summary: Check bootstrap status
+      description: Returns whether the server needs certificate bootstrapping
+      operationId: getBootstrapStatus
+      tags:
+        - Bootstrap Status
+      responses:
+        '200':
+          description: Bootstrap status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapStatus'
+              examples:
+                needs_bootstrap:
+                  summary: Server needs bootstrapping
+                  value:
+                    needsBootstrap: true
+                    reason: "No certificates found"
+                    certificateCount: 0
+                    hasRootCertificate: false
+                    serverStarted: "2025-09-18T10:00:00Z"
+                    message: "This server has no certificates configured. Please add a root certificate to establish the trust chain."
+                    nextSteps:
+                      - "Upload a root certificate"
+                      - "Verify certificate chain"
+                      - "Complete initial configuration"
+                already_configured:
+                  summary: Server already configured
+                  value:
+                    needsBootstrap: false
+                    reason: "Root certificate exists"
+                    certificateCount: 3
+                    hasRootCertificate: true
+                    rootCertificateCallsign: "KA1ABC"
+                    serverStarted: "2025-09-18T10:00:00Z"
+                    message: "Server is properly configured with certificate chain"
+                    configuredAt: "2025-09-15T14:30:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/bootstrap/certificate:
+    post:
+      summary: Add root certificate
+      description: Uploads and establishes a root certificate for the trust chain
+      operationId: addRootCertificate
+      tags:
+        - Certificate Bootstrap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateBootstrapRequest'
+            examples:
+              ecdsa_certificate:
+                summary: ECDSA root certificate
+                value:
+                  certificatePem: |
+                    -----BEGIN CERTIFICATE-----
+                    MIIBkTCCATegAwIBAgIUQwEFgH...
+                    -----END CERTIFICATE-----
+                  callsign: "KA1ABC"
+                  description: "Root certificate for emergency mesh network"
+                  emergencyUse: true
+                  trustLevel: "root"
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                certificate:
+                  type: string
+                  format: binary
+                  description: Certificate file (PEM format)
+                callsign:
+                  type: string
+                  description: Associated ham radio callsign
+                description:
+                  type: string
+                  description: Certificate description
+                emergencyUse:
+                  type: boolean
+                  description: Whether certificate is for emergency use
+              required: [certificate, callsign]
+      responses:
+        '201':
+          description: Root certificate added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateBootstrapResult'
+              examples:
+                successful_bootstrap:
+                  summary: Successful certificate bootstrap
+                  value:
+                    success: true
+                    message: "Root certificate established successfully"
+                    certificateId: "cert_ka1abc_root_001"
+                    callsign: "KA1ABC"
+                    fingerprint: "SHA256:a1b2c3d4e5f6789..."
+                    validFrom: "2025-01-01T00:00:00Z"
+                    validUntil: "2026-01-01T00:00:00Z"
+                    isRootCertificate: true
+                    trustChainEstablished: true
+                    installedAt: "2025-09-18T10:45:00Z"
+                    nextSteps:
+                      - "Certificate chain established"
+                      - "Server ready for normal operation"
+                      - "Configure station settings if needed"
+        '400':
+          description: Invalid certificate or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_certificate:
+                  summary: Invalid certificate format
+                  value:
+                    error: "Invalid certificate format"
+                    code: "INVALID_CERTIFICATE_FORMAT"
+                    timestamp: "2025-09-18T10:45:00Z"
+                    details:
+                      reason: "Certificate is not in valid PEM format"
+                      expectedFormat: "PEM-encoded X.509 certificate"
+                invalid_algorithm:
+                  summary: Unsupported algorithm
+                  value:
+                    error: "Unsupported certificate algorithm"
+                    code: "UNSUPPORTED_ALGORITHM"
+                    timestamp: "2025-09-18T10:45:00Z"
+                    details:
+                      algorithm: "RSA"
+                      supportedAlgorithms: ["ECDSA"]
+                      reason: "Only ECDSA certificates are supported"
+        '409':
+          description: Bootstrap not needed or already configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                already_configured:
+                  summary: Server already has root certificate
+                  value:
+                    error: "Root certificate already exists"
+                    code: "ALREADY_CONFIGURED"
+                    timestamp: "2025-09-18T10:45:00Z"
+                    details:
+                      existingCertificate: "cert_kb2def_root_001"
+                      configuredAt: "2025-09-15T14:30:00Z"
+                      message: "Server already has a root certificate configured"
+        '422':
+          description: Certificate validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                expired_certificate:
+                  summary: Certificate is expired
+                  value:
+                    error: "Certificate validation failed"
+                    code: "CERTIFICATE_EXPIRED"
+                    timestamp: "2025-09-18T10:45:00Z"
+                    details:
+                      validUntil: "2024-12-31T23:59:59Z"
+                      currentTime: "2025-09-18T10:45:00Z"
+                      reason: "Certificate has expired"
+                invalid_callsign:
+                  summary: Invalid callsign in certificate
+                  value:
+                    error: "Certificate validation failed"
+                    code: "INVALID_CALLSIGN"
+                    timestamp: "2025-09-18T10:45:00Z"
+                    details:
+                      providedCallsign: "KA1ABC"
+                      certificateCallsign: "KB2DEF"
+                      reason: "Callsign in certificate does not match provided callsign"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/bootstrap/certificate/{certificate_id}:
+    get:
+      summary: Get certificate details
+      description: Returns details about a specific certificate
+      operationId: getCertificateDetails
+      tags:
+        - Certificate Management
+      parameters:
+        - name: certificate_id
+          in: path
+          required: true
+          description: Certificate identifier
+          schema:
+            type: string
+          example: "cert_ka1abc_root_001"
+      responses:
+        '200':
+          description: Certificate details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateDetails'
+              examples:
+                root_certificate:
+                  summary: Root certificate details
+                  value:
+                    id: "cert_ka1abc_root_001"
+                    callsign: "KA1ABC"
+                    commonName: "KA1ABC Ham Radio Station"
+                    fingerprint: "SHA256:a1b2c3d4e5f6789..."
+                    algorithm: "ECDSA"
+                    keySize: 256
+                    curve: "P-256"
+                    validFrom: "2025-01-01T00:00:00Z"
+                    validUntil: "2026-01-01T00:00:00Z"
+                    isValid: true
+                    daysUntilExpiration: 104
+                    isRoot: true
+                    trustLevel: "root"
+                    status: "active"
+                    installedAt: "2025-09-18T10:45:00Z"
+                    keyUsage: ["digitalSignature", "keyEncipherment"]
+                    extendedKeyUsage: ["clientAuth", "serverAuth"]
+                    subject:
+                      commonName: "KA1ABC Ham Radio Station"
+                      organization: "Amateur Radio Emergency Network"
+                      country: "US"
+                      email: "ka1abc@arrl.net"
+                    issuer:
+                      commonName: "KA1ABC Ham Radio Station"
+                      organization: "Amateur Radio Emergency Network"
+                      country: "US"
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Remove certificate
+      description: Removes a certificate from the trust store (not allowed for root certificates with dependents)
+      operationId: removeCertificate
+      tags:
+        - Certificate Management
+      parameters:
+        - name: certificate_id
+          in: path
+          required: true
+          description: Certificate identifier
+          schema:
+            type: string
+          example: "cert_ka1abc_leaf_001"
+      responses:
+        '200':
+          description: Certificate removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateRemovalResult'
+              examples:
+                successful_removal:
+                  summary: Certificate removed
+                  value:
+                    success: true
+                    message: "Certificate removed successfully"
+                    certificateId: "cert_ka1abc_leaf_001"
+                    removedAt: "2025-09-18T11:00:00Z"
+                    affectedCertificates: []
+        '400':
+          description: Cannot remove certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                root_certificate_in_use:
+                  summary: Cannot remove root certificate with dependents
+                  value:
+                    error: "Cannot remove root certificate"
+                    code: "ROOT_CERTIFICATE_IN_USE"
+                    timestamp: "2025-09-18T11:00:00Z"
+                    details:
+                      dependentCertificates: 3
+                      reason: "Root certificate has dependent certificates"
+                      suggestion: "Remove dependent certificates first"
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/bootstrap/certificates:
+    get:
+      summary: List all certificates
+      description: Returns a list of all certificates in the trust store
+      operationId: listCertificates
+      tags:
+        - Certificate Management
+      parameters:
+        - name: type
+          in: query
+          description: Filter by certificate type
+          required: false
+          schema:
+            type: string
+            enum: [root, intermediate, leaf]
+        - name: status
+          in: query
+          description: Filter by certificate status
+          required: false
+          schema:
+            type: string
+            enum: [active, expired, revoked]
+        - name: callsign
+          in: query
+          description: Filter by callsign
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificate list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateList'
+              examples:
+                certificate_list:
+                  summary: List of certificates
+                  value:
+                    total: 3
+                    certificates:
+                      - id: "cert_ka1abc_root_001"
+                        callsign: "KA1ABC"
+                        commonName: "KA1ABC Ham Radio Station"
+                        fingerprint: "SHA256:a1b2c3d4e5f6789..."
+                        validUntil: "2026-01-01T00:00:00Z"
+                        isRoot: true
+                        status: "active"
+                        installedAt: "2025-09-18T10:45:00Z"
+                      - id: "cert_kb2def_intermediate_001"
+                        callsign: "KB2DEF"
+                        commonName: "KB2DEF Regional Authority"
+                        fingerprint: "SHA256:b2c3d4e5f6g7890..."
+                        validUntil: "2025-12-31T23:59:59Z"
+                        isRoot: false
+                        status: "active"
+                        installedAt: "2025-09-16T09:15:00Z"
+                      - id: "cert_kc3ghi_leaf_001"
+                        callsign: "KC3GHI"
+                        commonName: "KC3GHI Station Certificate"
+                        fingerprint: "SHA256:c3d4e5f6g7h8901..."
+                        validUntil: "2025-11-30T23:59:59Z"
+                        isRoot: false
+                        status: "active"
+                        installedAt: "2025-09-17T15:20:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/bootstrap/trust-chain:
+    get:
+      summary: Get trust chain information
+      description: Returns information about the current certificate trust chain
+      operationId: getTrustChain
+      tags:
+        - Trust Chain Management
+      responses:
+        '200':
+          description: Trust chain information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChainInfo'
+              examples:
+                established_chain:
+                  summary: Established trust chain
+                  value:
+                    established: true
+                    rootCertificate:
+                      id: "cert_ka1abc_root_001"
+                      callsign: "KA1ABC"
+                      fingerprint: "SHA256:a1b2c3d4e5f6789..."
+                      validUntil: "2026-01-01T00:00:00Z"
+                    chainDepth: 3
+                    totalCertificates: 5
+                    validCertificates: 5
+                    expiredCertificates: 0
+                    revokedCertificates: 0
+                    chainHealth: "healthy"
+                    lastValidated: "2025-09-18T10:45:00Z"
+                    nextValidation: "2025-09-18T22:45:00Z"
+                no_chain:
+                  summary: No trust chain established
+                  value:
+                    established: false
+                    rootCertificate: null
+                    chainDepth: 0
+                    totalCertificates: 0
+                    validCertificates: 0
+                    expiredCertificates: 0
+                    revokedCertificates: 0
+                    chainHealth: "none"
+                    message: "No root certificate configured"
+                    recommendation: "Add a root certificate to establish trust chain"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Validate trust chain
+      description: Triggers validation of the entire certificate trust chain
+      operationId: validateTrustChain
+      tags:
+        - Trust Chain Management
+      responses:
+        '200':
+          description: Trust chain validation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChainValidation'
+              examples:
+                valid_chain:
+                  summary: Valid trust chain
+                  value:
+                    valid: true
+                    message: "Trust chain validation successful"
+                    validatedAt: "2025-09-18T11:00:00Z"
+                    certificatesValidated: 5
+                    issues: []
+                    warnings: []
+                    recommendations: []
+                invalid_chain:
+                  summary: Invalid trust chain
+                  value:
+                    valid: false
+                    message: "Trust chain validation failed"
+                    validatedAt: "2025-09-18T11:00:00Z"
+                    certificatesValidated: 3
+                    issues:
+                      - type: "expired"
+                        certificateId: "cert_kb2def_intermediate_001"
+                        message: "Certificate has expired"
+                        severity: "error"
+                    warnings:
+                      - type: "expiring_soon"
+                        certificateId: "cert_kc3ghi_leaf_001"
+                        message: "Certificate expires in 30 days"
+                        severity: "warning"
+                    recommendations:
+                      - "Renew expired certificates"
+                      - "Plan renewal for expiring certificates"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    BootstrapStatus:
+      type: object
+      required:
+        - needsBootstrap
+        - reason
+        - certificateCount
+        - hasRootCertificate
+        - serverStarted
+        - message
+      properties:
+        needsBootstrap:
+          type: boolean
+          description: Whether server needs certificate bootstrapping
+          example: true
+        reason:
+          type: string
+          description: Reason for bootstrap status
+          example: "No certificates found"
+        certificateCount:
+          type: integer
+          description: Number of certificates currently installed
+          minimum: 0
+          example: 0
+        hasRootCertificate:
+          type: boolean
+          description: Whether a root certificate exists
+          example: false
+        rootCertificateCallsign:
+          type: string
+          description: Callsign of root certificate (if exists)
+          example: "KA1ABC"
+        serverStarted:
+          type: string
+          format: date-time
+          description: Server startup timestamp
+          example: "2025-09-18T10:00:00Z"
+        configuredAt:
+          type: string
+          format: date-time
+          description: When certificates were first configured
+          example: "2025-09-15T14:30:00Z"
+        message:
+          type: string
+          description: Human-readable status message
+          example: "This server has no certificates configured"
+        nextSteps:
+          type: array
+          description: Recommended next steps
+          items:
+            type: string
+          example: ["Upload a root certificate", "Verify certificate chain"]
+
+    CertificateBootstrapRequest:
+      type: object
+      required:
+        - certificatePem
+        - callsign
+      properties:
+        certificatePem:
+          type: string
+          description: Certificate in PEM format
+          example: |
+            -----BEGIN CERTIFICATE-----
+            MIIBkTCCATegAwIBAgIUQwEFgH...
+            -----END CERTIFICATE-----
+        callsign:
+          type: string
+          description: Ham radio callsign associated with certificate
+          pattern: '^[A-Z0-9]{2,}[0-9][A-Z]{1,4}$'
+          example: "KA1ABC"
+        description:
+          type: string
+          description: Human-readable description of certificate
+          maxLength: 255
+          example: "Root certificate for emergency mesh network"
+        emergencyUse:
+          type: boolean
+          description: Whether certificate is designated for emergency use
+          default: false
+          example: true
+        trustLevel:
+          type: string
+          enum: [root, intermediate, leaf]
+          description: Certificate trust level
+          default: "root"
+          example: "root"
+        validityPeriod:
+          $ref: '#/components/schemas/ValidityPeriod'
+
+    ValidityPeriod:
+      type: object
+      properties:
+        notBefore:
+          type: string
+          format: date-time
+          description: Certificate valid from date
+          example: "2025-01-01T00:00:00Z"
+        notAfter:
+          type: string
+          format: date-time
+          description: Certificate valid until date
+          example: "2026-01-01T00:00:00Z"
+
+    CertificateBootstrapResult:
+      type: object
+      required:
+        - success
+        - message
+        - certificateId
+        - callsign
+        - fingerprint
+        - validFrom
+        - validUntil
+        - isRootCertificate
+        - trustChainEstablished
+        - installedAt
+      properties:
+        success:
+          type: boolean
+          description: Whether bootstrap was successful
+          example: true
+        message:
+          type: string
+          description: Result message
+          example: "Root certificate established successfully"
+        certificateId:
+          type: string
+          description: Unique identifier for the certificate
+          example: "cert_ka1abc_root_001"
+        callsign:
+          type: string
+          description: Associated callsign
+          example: "KA1ABC"
+        fingerprint:
+          type: string
+          description: Certificate fingerprint
+          example: "SHA256:a1b2c3d4e5f6789..."
+        validFrom:
+          type: string
+          format: date-time
+          description: Certificate validity start
+          example: "2025-01-01T00:00:00Z"
+        validUntil:
+          type: string
+          format: date-time
+          description: Certificate validity end
+          example: "2026-01-01T00:00:00Z"
+        isRootCertificate:
+          type: boolean
+          description: Whether this is a root certificate
+          example: true
+        trustChainEstablished:
+          type: boolean
+          description: Whether trust chain is now established
+          example: true
+        installedAt:
+          type: string
+          format: date-time
+          description: Installation timestamp
+          example: "2025-09-18T10:45:00Z"
+        nextSteps:
+          type: array
+          description: Recommended next steps
+          items:
+            type: string
+          example: ["Certificate chain established", "Server ready for normal operation"]
+
+    CertificateDetails:
+      type: object
+      required:
+        - id
+        - callsign
+        - commonName
+        - fingerprint
+        - algorithm
+        - validFrom
+        - validUntil
+        - isValid
+        - isRoot
+        - status
+        - installedAt
+      properties:
+        id:
+          type: string
+          description: Certificate identifier
+          example: "cert_ka1abc_root_001"
+        callsign:
+          type: string
+          description: Associated callsign
+          example: "KA1ABC"
+        commonName:
+          type: string
+          description: Certificate common name
+          example: "KA1ABC Ham Radio Station"
+        fingerprint:
+          type: string
+          description: Certificate fingerprint
+          example: "SHA256:a1b2c3d4e5f6789..."
+        algorithm:
+          type: string
+          description: Certificate algorithm
+          example: "ECDSA"
+        keySize:
+          type: integer
+          description: Key size in bits
+          example: 256
+        curve:
+          type: string
+          description: Elliptic curve (for ECDSA)
+          example: "P-256"
+        validFrom:
+          type: string
+          format: date-time
+          description: Validity start date
+          example: "2025-01-01T00:00:00Z"
+        validUntil:
+          type: string
+          format: date-time
+          description: Validity end date
+          example: "2026-01-01T00:00:00Z"
+        isValid:
+          type: boolean
+          description: Whether certificate is currently valid
+          example: true
+        daysUntilExpiration:
+          type: integer
+          description: Days until certificate expires
+          example: 104
+        isRoot:
+          type: boolean
+          description: Whether this is a root certificate
+          example: true
+        trustLevel:
+          type: string
+          enum: [root, intermediate, leaf]
+          description: Certificate trust level
+          example: "root"
+        status:
+          type: string
+          enum: [active, expired, revoked]
+          description: Certificate status
+          example: "active"
+        installedAt:
+          type: string
+          format: date-time
+          description: Installation timestamp
+          example: "2025-09-18T10:45:00Z"
+        keyUsage:
+          type: array
+          description: Certificate key usage
+          items:
+            type: string
+          example: ["digitalSignature", "keyEncipherment"]
+        extendedKeyUsage:
+          type: array
+          description: Extended key usage
+          items:
+            type: string
+          example: ["clientAuth", "serverAuth"]
+        subject:
+          $ref: '#/components/schemas/CertificateSubject'
+        issuer:
+          $ref: '#/components/schemas/CertificateSubject'
+
+    CertificateSubject:
+      type: object
+      required:
+        - commonName
+      properties:
+        commonName:
+          type: string
+          description: Subject common name
+          example: "KA1ABC Ham Radio Station"
+        organization:
+          type: string
+          description: Organization
+          example: "Amateur Radio Emergency Network"
+        country:
+          type: string
+          description: Country code
+          example: "US"
+        state:
+          type: string
+          description: State or province
+          example: "California"
+        locality:
+          type: string
+          description: City or locality
+          example: "San Francisco"
+        email:
+          type: string
+          format: email
+          description: Email address
+          example: "ka1abc@arrl.net"
+
+    CertificateRemovalResult:
+      type: object
+      required:
+        - success
+        - message
+        - certificateId
+        - removedAt
+      properties:
+        success:
+          type: boolean
+          description: Whether removal was successful
+          example: true
+        message:
+          type: string
+          description: Removal result message
+          example: "Certificate removed successfully"
+        certificateId:
+          type: string
+          description: ID of removed certificate
+          example: "cert_ka1abc_leaf_001"
+        removedAt:
+          type: string
+          format: date-time
+          description: Removal timestamp
+          example: "2025-09-18T11:00:00Z"
+        affectedCertificates:
+          type: array
+          description: Other certificates affected by removal
+          items:
+            type: string
+          example: []
+
+    CertificateList:
+      type: object
+      required:
+        - total
+        - certificates
+      properties:
+        total:
+          type: integer
+          description: Total number of certificates
+          minimum: 0
+          example: 3
+        certificates:
+          type: array
+          description: Certificate summaries
+          items:
+            $ref: '#/components/schemas/CertificateSummary'
+
+    CertificateSummary:
+      type: object
+      required:
+        - id
+        - callsign
+        - commonName
+        - fingerprint
+        - validUntil
+        - isRoot
+        - status
+        - installedAt
+      properties:
+        id:
+          type: string
+          description: Certificate identifier
+          example: "cert_ka1abc_root_001"
+        callsign:
+          type: string
+          description: Associated callsign
+          example: "KA1ABC"
+        commonName:
+          type: string
+          description: Certificate common name
+          example: "KA1ABC Ham Radio Station"
+        fingerprint:
+          type: string
+          description: Certificate fingerprint
+          example: "SHA256:a1b2c3d4e5f6789..."
+        validUntil:
+          type: string
+          format: date-time
+          description: Expiration date
+          example: "2026-01-01T00:00:00Z"
+        isRoot:
+          type: boolean
+          description: Whether this is a root certificate
+          example: true
+        status:
+          type: string
+          enum: [active, expired, revoked]
+          description: Certificate status
+          example: "active"
+        installedAt:
+          type: string
+          format: date-time
+          description: Installation timestamp
+          example: "2025-09-18T10:45:00Z"
+
+    TrustChainInfo:
+      type: object
+      required:
+        - established
+        - chainDepth
+        - totalCertificates
+        - validCertificates
+        - expiredCertificates
+        - revokedCertificates
+        - chainHealth
+      properties:
+        established:
+          type: boolean
+          description: Whether trust chain is established
+          example: true
+        rootCertificate:
+          $ref: '#/components/schemas/CertificateSummary'
+        chainDepth:
+          type: integer
+          description: Maximum depth of certificate chain
+          minimum: 0
+          example: 3
+        totalCertificates:
+          type: integer
+          description: Total certificates in store
+          minimum: 0
+          example: 5
+        validCertificates:
+          type: integer
+          description: Number of valid certificates
+          minimum: 0
+          example: 5
+        expiredCertificates:
+          type: integer
+          description: Number of expired certificates
+          minimum: 0
+          example: 0
+        revokedCertificates:
+          type: integer
+          description: Number of revoked certificates
+          minimum: 0
+          example: 0
+        chainHealth:
+          type: string
+          enum: [healthy, warning, critical, none]
+          description: Overall chain health
+          example: "healthy"
+        lastValidated:
+          type: string
+          format: date-time
+          description: Last validation timestamp
+          example: "2025-09-18T10:45:00Z"
+        nextValidation:
+          type: string
+          format: date-time
+          description: Next scheduled validation
+          example: "2025-09-18T22:45:00Z"
+        message:
+          type: string
+          description: Status message
+          example: "Trust chain is healthy"
+        recommendation:
+          type: string
+          description: Recommended action
+          example: "No action required"
+
+    TrustChainValidation:
+      type: object
+      required:
+        - valid
+        - message
+        - validatedAt
+        - certificatesValidated
+        - issues
+        - warnings
+        - recommendations
+      properties:
+        valid:
+          type: boolean
+          description: Whether validation passed
+          example: true
+        message:
+          type: string
+          description: Validation result message
+          example: "Trust chain validation successful"
+        validatedAt:
+          type: string
+          format: date-time
+          description: Validation timestamp
+          example: "2025-09-18T11:00:00Z"
+        certificatesValidated:
+          type: integer
+          description: Number of certificates validated
+          minimum: 0
+          example: 5
+        issues:
+          type: array
+          description: Validation issues found
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        warnings:
+          type: array
+          description: Validation warnings
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        recommendations:
+          type: array
+          description: Recommended actions
+          items:
+            type: string
+          example: ["Renew expired certificates"]
+
+    ValidationIssue:
+      type: object
+      required:
+        - type
+        - certificateId
+        - message
+        - severity
+      properties:
+        type:
+          type: string
+          enum: [expired, expiring_soon, invalid_signature, revoked, chain_broken]
+          description: Issue type
+          example: "expired"
+        certificateId:
+          type: string
+          description: Affected certificate ID
+          example: "cert_kb2def_intermediate_001"
+        message:
+          type: string
+          description: Issue description
+          example: "Certificate has expired"
+        severity:
+          type: string
+          enum: [error, warning, info]
+          description: Issue severity
+          example: "error"
+        details:
+          type: object
+          description: Additional issue details
+          additionalProperties: true
+
+    Error:
+      type: object
+      required:
+        - error
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Invalid certificate format"
+        code:
+          type: string
+          description: Error code
+          example: "INVALID_CERTIFICATE_FORMAT"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2025-09-18T10:45:00Z"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Bootstrap Status
+    description: Operations for checking bootstrap status
+  - name: Certificate Bootstrap
+    description: Operations for bootstrapping certificates
+  - name: Certificate Management
+    description: Operations for managing certificates
+  - name: Trust Chain Management
+    description: Operations for managing trust chains

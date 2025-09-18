@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Database } from '../../lib/database';
+import { RadioJSXCompiler } from '../../lib/jsx-radio';
+import { HamRadioCompressor } from '../../lib/compression';
 import './setup';
 
 /**
  * Integration test for applying templates to pages
  * Tests complete user workflow from browsing templates to customizing content
- *
- * This test will initially fail (TDD approach) until the visual page builder is implemented
+ * Using REAL components, only mocking browser APIs
  */
 
 interface Template {
@@ -25,23 +27,34 @@ interface Page {
   title: string;
   slug: string;
   templateId?: string;
-  components: string[];
+  components: any[];
   metadata: {
     compressedSize: number;
     bandwidthValid: boolean;
   };
 }
 
-// Mock template service
-class MockTemplateService {
-  private templates = new Map<string, Template>();
+describe('Visual Page Builder - Apply Template (Real Components)', () => {
+  let database: Database;
+  let jsxCompiler: RadioJSXCompiler;
+  let compressor: HamRadioCompressor;
+  let templates: Map<string, Template>;
+  let pages: Map<string, Page>;
 
-  constructor() {
-    this.initializeDefaultTemplates();
-  }
+  beforeEach(async () => {
+    // Use real components
+    database = new Database();
+    jsxCompiler = new RadioJSXCompiler();
+    compressor = new HamRadioCompressor();
 
-  private initializeDefaultTemplates() {
-    // Contact page template
+    // Initialize database (mocked IndexedDB in setup.ts)
+    await database.init();
+
+    // Initialize template and page storage
+    templates = new Map();
+    pages = new Map();
+
+    // Add default templates
     const contactTemplate: Template = {
       id: 'template-contact-1',
       name: 'Basic Contact',
@@ -49,470 +62,303 @@ class MockTemplateService {
       preview: '<div>Contact template preview</div>',
       components: [
         {
-          type: 'heading',
-          gridArea: { row: 1, col: 1, rowSpan: 1, colSpan: 12 },
-          properties: {
-            content: 'Contact {{CALLSIGN}}',
-            level: 1
-          }
+          type: 'HEADING',
+          gridArea: { row: 0, col: 0, rowSpan: 1, colSpan: 12 },
+          properties: { text: 'Contact Us', level: 1 }
         },
         {
-          type: 'text',
-          gridArea: { row: 2, col: 1, rowSpan: 1, colSpan: 6 },
-          properties: {
-            content: 'Feel free to reach out via radio or email.'
-          }
+          type: 'FORM',
+          gridArea: { row: 1, col: 0, rowSpan: 4, colSpan: 12 },
+          properties: { action: '/submit', method: 'POST' }
         },
         {
-          type: 'form',
-          gridArea: { row: 3, col: 1, rowSpan: 1, colSpan: 12 },
-          properties: {
-            fields: [
-              { type: 'email', name: 'email', label: 'Email' },
-              { type: 'textarea', name: 'message', label: 'Message' }
-            ]
-          }
+          type: 'INPUT',
+          gridArea: { row: 2, col: 0, rowSpan: 1, colSpan: 6 },
+          properties: { name: 'callsign', placeholder: 'Your Callsign', required: true }
+        },
+        {
+          type: 'INPUT',
+          gridArea: { row: 2, col: 6, rowSpan: 1, colSpan: 6 },
+          properties: { name: 'email', type: 'email', placeholder: 'Email', required: false }
         }
       ]
     };
 
-    // About page template
-    const aboutTemplate: Template = {
-      id: 'template-about-1',
-      name: 'Simple About',
-      category: 'about',
-      preview: '<div>About template preview</div>',
+    const blogTemplate: Template = {
+      id: 'template-blog-1',
+      name: 'Simple Blog',
+      category: 'blog',
+      preview: '<div>Blog template preview</div>',
       components: [
         {
-          type: 'heading',
-          gridArea: { row: 1, col: 1, rowSpan: 1, colSpan: 12 },
-          properties: {
-            content: 'About {{CALLSIGN}}',
-            level: 1
-          }
+          type: 'HEADING',
+          gridArea: { row: 0, col: 0, rowSpan: 1, colSpan: 12 },
+          properties: { text: 'Latest Updates', level: 1 }
         },
         {
-          type: 'text',
-          gridArea: { row: 2, col: 1, rowSpan: 1, colSpan: 8 },
-          properties: {
-            content: 'Welcome to my amateur radio station!'
-          }
+          type: 'CONTAINER',
+          gridArea: { row: 1, col: 0, rowSpan: 3, colSpan: 8 },
+          properties: { className: 'content' }
         },
         {
-          type: 'image',
-          gridArea: { row: 2, col: 9, rowSpan: 1, colSpan: 4 },
-          properties: {
-            src: '/images/station.jpg',
-            alt: 'Radio station setup'
-          }
+          type: 'LIST',
+          gridArea: { row: 1, col: 8, rowSpan: 3, colSpan: 4 },
+          properties: { items: ['Archives', 'Categories', 'Tags'] }
         }
       ]
     };
 
-    this.templates.set(contactTemplate.id, contactTemplate);
-    this.templates.set(aboutTemplate.id, aboutTemplate);
-  }
+    templates.set(contactTemplate.id, contactTemplate);
+    templates.set(blogTemplate.id, blogTemplate);
+  });
 
-  async browseTemplates(category?: string): Promise<Template[]> {
-    const allTemplates = Array.from(this.templates.values());
+  describe('Browse and Select Templates', () => {
+    it('should list available templates by category', () => {
+      // Get all templates
+      const allTemplates = Array.from(templates.values());
+      expect(allTemplates).toHaveLength(2);
 
-    if (category) {
-      return allTemplates.filter(t => t.category === category);
-    }
+      // Filter by category
+      const contactTemplates = allTemplates.filter(t => t.category === 'contact');
+      expect(contactTemplates).toHaveLength(1);
+      expect(contactTemplates[0].name).toBe('Basic Contact');
 
-    return allTemplates;
-  }
+      const blogTemplates = allTemplates.filter(t => t.category === 'blog');
+      expect(blogTemplates).toHaveLength(1);
+      expect(blogTemplates[0].name).toBe('Simple Blog');
+    });
 
-  async getTemplate(templateId: string): Promise<Template | null> {
-    return this.templates.get(templateId) || null;
-  }
-}
+    it('should preview template before applying', () => {
+      const template = templates.get('template-contact-1');
+      expect(template).toBeDefined();
+      expect(template?.preview).toContain('Contact template preview');
+      expect(template?.components).toHaveLength(4);
+    });
+  });
 
-// Mock page builder with template functionality
-class MockPageBuilderWithTemplates {
-  private pages = new Map<string, Page>();
-  private currentPage: Page | null = null;
-  private components = new Map();
-  private componentCounter = 0;
-  private templateService = new MockTemplateService();
+  describe('Apply Template to Page', () => {
+    it('should apply template components to new page', async () => {
+      const template = templates.get('template-contact-1')!;
 
-  async createPage(config: { title: string; slug: string }): Promise<Page> {
-    const page: Page = {
-      id: `page-${Date.now()}`,
-      title: config.title,
-      slug: config.slug,
-      components: [],
-      metadata: {
-        compressedSize: 100,
-        bandwidthValid: true
-      }
-    };
-
-    this.pages.set(page.id, page);
-    this.currentPage = page;
-    return page;
-  }
-
-  async browseTemplates(category?: string): Promise<Template[]> {
-    return this.templateService.browseTemplates(category);
-  }
-
-  async applyTemplate(templateId: string): Promise<void> {
-    if (!this.currentPage) {
-      throw new Error('No active page');
-    }
-
-    const template = await this.templateService.getTemplate(templateId);
-    if (!template) {
-      throw new Error(`Template ${templateId} not found`);
-    }
-
-    // Clear existing components
-    this.currentPage.components = [];
-    this.components.clear();
-    this.componentCounter = 0;
-
-    // Apply template components
-    for (const templateComponent of template.components) {
-      this.componentCounter++;
-      const componentId = `${templateComponent.type}-${this.componentCounter}`;
-
-      const component = {
-        id: componentId,
-        type: templateComponent.type,
-        gridArea: templateComponent.gridArea,
-        properties: { ...templateComponent.properties }
+      // Create new page from template
+      const newPage: Page = {
+        id: `page-${Date.now()}`,
+        title: 'Contact Us',
+        slug: '/contact',
+        templateId: template.id,
+        components: [...template.components],
+        metadata: {
+          compressedSize: 0,
+          bandwidthValid: true
+        }
       };
 
-      this.components.set(componentId, component);
-      this.currentPage.components.push(componentId);
-    }
+      // Compile components with real JSX compiler
+      const compiledComponents = jsxCompiler.compile({
+        type: 'div',
+        props: {},
+        children: newPage.components.map(c => ({
+          type: c.type.toLowerCase(),
+          props: c.properties,
+          children: []
+        }))
+      });
 
-    this.currentPage.templateId = templateId;
-    this.updateBandwidthMetrics();
-  }
+      // Compress with real compressor
+      const compressed = compressor.compress(JSON.stringify(compiledComponents));
+      newPage.metadata.compressedSize = compressed.length;
 
-  async editComponent(componentId: string, properties: any): Promise<any> {
-    const component = this.components.get(componentId);
-    if (!component) {
-      throw new Error(`Component ${componentId} not found`);
-    }
+      // Check bandwidth constraints (2KB for HF bands)
+      newPage.metadata.bandwidthValid = compressed.length < 2048;
 
-    component.properties = { ...component.properties, ...properties };
-    this.updateBandwidthMetrics();
+      // Save to database
+      await database.savePage({
+        slug: newPage.slug,
+        content: JSON.stringify(newPage),
+        compressed: compressed
+      });
 
-    return component;
-  }
+      pages.set(newPage.id, newPage);
 
-  async previewPage(): Promise<string> {
-    if (!this.currentPage) {
-      throw new Error('No active page');
-    }
+      // Verify page was created correctly
+      expect(newPage.components).toHaveLength(4);
+      expect(newPage.templateId).toBe('template-contact-1');
+      expect(newPage.metadata.bandwidthValid).toBe(true);
 
-    let html = `<html><head><title>${this.currentPage.title}</title></head><body>`;
+      // Verify it was saved to database
+      const savedPage = await database.getPage(newPage.slug);
+      expect(savedPage).toBeDefined();
+    });
 
-    for (const componentId of this.currentPage.components) {
-      const component = this.components.get(componentId);
-      if (component) {
-        html += this.renderComponent(component);
-      }
-    }
+    it('should allow customizing template after applying', async () => {
+      // Apply blog template
+      const template = templates.get('template-blog-1')!;
 
-    html += '</body></html>';
-    return html;
-  }
+      const page: Page = {
+        id: `page-${Date.now()}`,
+        title: 'Ham Radio Blog',
+        slug: '/blog',
+        templateId: template.id,
+        components: [...template.components],
+        metadata: {
+          compressedSize: 0,
+          bandwidthValid: true
+        }
+      };
 
-  private renderComponent(component: any): string {
-    switch (component.type) {
-      case 'heading':
-        const level = component.properties.level || 1;
-        return `<h${level}>${component.properties.content}</h${level}>`;
-      case 'text':
-        return `<p>${component.properties.content}</p>`;
-      case 'form':
-        let formHtml = '<form>';
-        for (const field of component.properties.fields || []) {
-          if (field.type === 'textarea') {
-            formHtml += `<label>${field.label}</label><textarea name="${field.name}"></textarea>`;
-          } else {
-            formHtml += `<label>${field.label}</label><input type="${field.type}" name="${field.name}">`;
+      // Customize heading text
+      page.components[0].properties.text = 'KA1ABC Ham Radio Blog';
+
+      // Add custom content to container
+      const containerIndex = page.components.findIndex(c => c.type === 'CONTAINER');
+      page.components[containerIndex].properties.children = [
+        {
+          type: 'PARAGRAPH',
+          properties: { text: 'Welcome to my ham radio blog!' }
+        }
+      ];
+
+      // Update list items
+      const listIndex = page.components.findIndex(c => c.type === 'LIST');
+      page.components[listIndex].properties.items = [
+        'DX Reports',
+        'Equipment Reviews',
+        'Antenna Projects'
+      ];
+
+      // Compile and compress with real components
+      const compiled = jsxCompiler.compile({
+        type: 'div',
+        props: {},
+        children: page.components.map(c => ({
+          type: c.type.toLowerCase(),
+          props: c.properties,
+          children: c.properties.children || []
+        }))
+      });
+
+      const compressed = compressor.compress(JSON.stringify(compiled));
+      page.metadata.compressedSize = compressed.length;
+      page.metadata.bandwidthValid = compressed.length < 2048;
+
+      await database.savePage({
+        slug: page.slug,
+        content: JSON.stringify(page),
+        compressed: compressed
+      });
+
+      pages.set(page.id, page);
+
+      // Verify customizations
+      expect(page.components[0].properties.text).toBe('KA1ABC Ham Radio Blog');
+      expect(page.components[listIndex].properties.items).toContain('DX Reports');
+      expect(page.metadata.bandwidthValid).toBe(true);
+    });
+
+    it('should maintain template link for updates', () => {
+      const template = templates.get('template-contact-1')!;
+
+      const page: Page = {
+        id: `page-${Date.now()}`,
+        title: 'Contact',
+        slug: '/contact',
+        templateId: template.id,
+        components: [...template.components],
+        metadata: {
+          compressedSize: 0,
+          bandwidthValid: true
+        }
+      };
+
+      pages.set(page.id, page);
+
+      // Find all pages using this template
+      const pagesUsingTemplate = Array.from(pages.values())
+        .filter(p => p.templateId === template.id);
+
+      expect(pagesUsingTemplate).toHaveLength(1);
+      expect(pagesUsingTemplate[0].id).toBe(page.id);
+    });
+  });
+
+  describe('Template Validation', () => {
+    it('should validate component grid positions do not overlap', () => {
+      const template = templates.get('template-contact-1')!;
+
+      // Check for overlapping components
+      const gridMap = new Map<string, any>();
+      let hasOverlap = false;
+
+      for (const component of template.components) {
+        const { row, col, rowSpan, colSpan } = component.gridArea;
+
+        for (let r = row; r < row + rowSpan; r++) {
+          for (let c = col; c < col + colSpan; c++) {
+            const key = `${r}-${c}`;
+            if (gridMap.has(key)) {
+              hasOverlap = true;
+              break;
+            }
+            gridMap.set(key, component);
           }
         }
-        formHtml += '</form>';
-        return formHtml;
-      case 'image':
-        return `<img src="${component.properties.src}" alt="${component.properties.alt}">`;
-      default:
-        return `<div>Component: ${component.type}</div>`;
-    }
-  }
-
-  private updateBandwidthMetrics(): void {
-    if (!this.currentPage) return;
-
-    let estimatedSize = 200; // Base template overhead
-
-    for (const componentId of this.currentPage.components) {
-      const component = this.components.get(componentId);
-      if (component) {
-        estimatedSize += this.estimateComponentSize(component);
       }
-    }
 
-    this.currentPage.metadata.compressedSize = estimatedSize;
-    this.currentPage.metadata.bandwidthValid = estimatedSize < 2048;
-  }
-
-  private estimateComponentSize(component: any): number {
-    switch (component.type) {
-      case 'heading':
-        return (component.properties.content?.length || 0) * 0.4 + 30;
-      case 'text':
-        return (component.properties.content?.length || 0) * 0.3 + 20;
-      case 'form':
-        return (component.properties.fields?.length || 0) * 80 + 100;
-      case 'image':
-        return 150; // Image markup overhead
-      default:
-        return 50;
-    }
-  }
-
-  getPage(): Page | null {
-    return this.currentPage;
-  }
-
-  getComponent(componentId: string): any {
-    return this.components.get(componentId) || null;
-  }
-
-  getCurrentComponents(): any[] {
-    if (!this.currentPage) return [];
-    return this.currentPage.components.map(id => this.components.get(id)).filter(Boolean);
-  }
-
-  reset(): void {
-    this.pages.clear();
-    this.components.clear();
-    this.currentPage = null;
-    this.componentCounter = 0;
-  }
-}
-
-describe('Visual Page Builder - Apply Template', () => {
-  let pageBuilder: MockPageBuilderWithTemplates;
-
-  beforeEach(async () => {
-    pageBuilder = new MockPageBuilderWithTemplates();
-  });
-
-  it('should apply contact template to page', async () => {
-    // 1. Create new page
-    const page = await pageBuilder.createPage({
-      title: 'Contact',
-      slug: 'contact'
+      expect(hasOverlap).toBe(false);
     });
 
-    expect(page.components).toHaveLength(0);
+    it('should ensure template fits within bandwidth constraints', async () => {
+      const template = templates.get('template-blog-1')!;
 
-    // 2. Browse templates
-    const templates = await pageBuilder.browseTemplates('contact');
+      // Compile template with real compiler
+      const compiled = jsxCompiler.compile({
+        type: 'div',
+        props: {},
+        children: template.components.map(c => ({
+          type: c.type.toLowerCase(),
+          props: c.properties,
+          children: []
+        }))
+      });
 
-    expect(templates).toHaveLength(1);
-    expect(templates[0].name).toBe('Basic Contact');
-    expect(templates[0].category).toBe('contact');
+      // Compress with real compressor
+      const compressed = compressor.compress(JSON.stringify(compiled));
 
-    // 3. Apply template
-    await pageBuilder.applyTemplate(templates[0].id);
-
-    const updatedPage = pageBuilder.getPage();
-    expect(updatedPage?.templateId).toBe(templates[0].id);
-    expect(updatedPage?.components).toHaveLength(3); // heading, text, form
-
-    // Verify components were created correctly
-    const components = pageBuilder.getCurrentComponents();
-    expect(components).toHaveLength(3);
-
-    const headingComponent = components.find(c => c.type === 'heading');
-    const textComponent = components.find(c => c.type === 'text');
-    const formComponent = components.find(c => c.type === 'form');
-
-    expect(headingComponent).toBeDefined();
-    expect(headingComponent.properties.content).toBe('Contact {{CALLSIGN}}');
-    expect(headingComponent.gridArea.colSpan).toBe(12);
-
-    expect(textComponent).toBeDefined();
-    expect(textComponent.properties.content).toBe('Feel free to reach out via radio or email.');
-
-    expect(formComponent).toBeDefined();
-    expect(formComponent.properties.fields).toHaveLength(2);
-
-    // 4. Customize content
-    await pageBuilder.editComponent(headingComponent.id, {
-      content: 'Contact KA1ABC'
+      // Should be under 2KB for HF bands
+      expect(compressed.length).toBeLessThan(2048);
     });
 
-    const customizedComponent = pageBuilder.getComponent(headingComponent.id);
-    expect(customizedComponent.properties.content).toBe('Contact KA1ABC');
+    it('should reject template with invalid component types', () => {
+      const validTypes = ['HEADING', 'PARAGRAPH', 'TEXT', 'IMAGE', 'FORM',
+                         'INPUT', 'BUTTON', 'LINK', 'LIST', 'TABLE',
+                         'CONTAINER', 'DIVIDER'];
 
-    // 5. Preview page
-    const preview = await pageBuilder.previewPage();
-    expect(preview).toContain('Contact KA1ABC');
-    expect(preview).toContain('Feel free to reach out');
-    expect(preview).toContain('<form>');
-    expect(preview).toContain('name="email"');
-    expect(preview).toContain('name="message"');
-  });
+      const invalidTemplate: Template = {
+        id: 'invalid-1',
+        name: 'Invalid',
+        category: 'test',
+        preview: '',
+        components: [
+          {
+            type: 'INVALID_TYPE',
+            gridArea: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
+            properties: {}
+          }
+        ]
+      };
 
-  it('should browse templates by category', async () => {
-    // Create page
-    await pageBuilder.createPage({
-      title: 'Test',
-      slug: 'test'
-    });
+      // Validate component types
+      const allValid = invalidTemplate.components.every(c =>
+        validTypes.includes(c.type)
+      );
 
-    // Browse contact templates
-    const contactTemplates = await pageBuilder.browseTemplates('contact');
-    expect(contactTemplates).toHaveLength(1);
-    expect(contactTemplates[0].category).toBe('contact');
-
-    // Browse about templates
-    const aboutTemplates = await pageBuilder.browseTemplates('about');
-    expect(aboutTemplates).toHaveLength(1);
-    expect(aboutTemplates[0].category).toBe('about');
-
-    // Browse all templates
-    const allTemplates = await pageBuilder.browseTemplates();
-    expect(allTemplates).toHaveLength(2);
-  });
-
-  it('should handle template application with proper grid layout', async () => {
-    // Create page and apply about template
-    await pageBuilder.createPage({
-      title: 'About',
-      slug: 'about'
-    });
-
-    const templates = await pageBuilder.browseTemplates('about');
-    await pageBuilder.applyTemplate(templates[0].id);
-
-    const components = pageBuilder.getCurrentComponents();
-
-    // Check grid positioning
-    const headingComponent = components.find(c => c.type === 'heading');
-    const textComponent = components.find(c => c.type === 'text');
-    const imageComponent = components.find(c => c.type === 'image');
-
-    expect(headingComponent.gridArea).toEqual({
-      row: 1, col: 1, rowSpan: 1, colSpan: 12
-    });
-
-    expect(textComponent.gridArea).toEqual({
-      row: 2, col: 1, rowSpan: 1, colSpan: 8
-    });
-
-    expect(imageComponent.gridArea).toEqual({
-      row: 2, col: 9, rowSpan: 1, colSpan: 4
+      expect(allValid).toBe(false);
     });
   });
 
-  it('should clear existing components when applying template', async () => {
-    // Create page with existing content
-    const page = await pageBuilder.createPage({
-      title: 'Test',
-      slug: 'test'
-    });
-
-    // Simulate having existing components (in real implementation, these would be added via drag/drop)
-    page.components.push('existing-component');
-
-    // Apply template
-    const templates = await pageBuilder.browseTemplates('contact');
-    await pageBuilder.applyTemplate(templates[0].id);
-
-    const updatedPage = pageBuilder.getPage();
-    expect(updatedPage?.components).not.toContain('existing-component');
-    expect(updatedPage?.components).toHaveLength(3); // Only template components
-  });
-
-  it('should validate bandwidth after template application', async () => {
-    // Create page
-    await pageBuilder.createPage({
-      title: 'Bandwidth Test',
-      slug: 'bandwidth-test'
-    });
-
-    // Apply template
-    const templates = await pageBuilder.browseTemplates('contact');
-    await pageBuilder.applyTemplate(templates[0].id);
-
-    const page = pageBuilder.getPage();
-    expect(page?.metadata.compressedSize).toBeGreaterThan(0);
-    expect(page?.metadata.bandwidthValid).toBe(true);
-  });
-
-  it('should preserve template reference after application', async () => {
-    // Create page and apply template
-    await pageBuilder.createPage({
-      title: 'Template Test',
-      slug: 'template-test'
-    });
-
-    const templates = await pageBuilder.browseTemplates('about');
-    const templateId = templates[0].id;
-
-    await pageBuilder.applyTemplate(templateId);
-
-    const page = pageBuilder.getPage();
-    expect(page?.templateId).toBe(templateId);
-  });
-
-  it('should handle template not found error', async () => {
-    // Create page
-    await pageBuilder.createPage({
-      title: 'Error Test',
-      slug: 'error-test'
-    });
-
-    // Try to apply non-existent template
-    await expect(pageBuilder.applyTemplate('non-existent-template'))
-      .rejects.toThrow('Template non-existent-template not found');
-  });
-
-  it('should handle template application without active page', async () => {
-    // Try to apply template without creating page first
-    const templates = await pageBuilder.browseTemplates('contact');
-
-    await expect(pageBuilder.applyTemplate(templates[0].id))
-      .rejects.toThrow('No active page');
-  });
-
-  it('should generate correct preview HTML for template', async () => {
-    // Create page and apply template
-    await pageBuilder.createPage({
-      title: 'Preview Test',
-      slug: 'preview-test'
-    });
-
-    const templates = await pageBuilder.browseTemplates('about');
-    await pageBuilder.applyTemplate(templates[0].id);
-
-    // Customize heading
-    const components = pageBuilder.getCurrentComponents();
-    const headingComponent = components.find(c => c.type === 'heading');
-    await pageBuilder.editComponent(headingComponent.id, {
-      content: 'About KA1ABC'
-    });
-
-    // Generate preview
-    const preview = await pageBuilder.previewPage();
-
-    // Verify HTML structure
-    expect(preview).toContain('<html>');
-    expect(preview).toContain('<title>Preview Test</title>');
-    expect(preview).toContain('<h1>About KA1ABC</h1>');
-    expect(preview).toContain('<p>Welcome to my amateur radio station!</p>');
-    expect(preview).toContain('<img src="/images/station.jpg"');
-    expect(preview).toContain('alt="Radio station setup"');
+  afterEach(async () => {
+    // Clean up
+    await database.close();
+    vi.clearAllMocks();
   });
 });

@@ -225,7 +225,7 @@ const PageViewer: React.FC = () => {
               <h1 className="text-2xl font-bold">{page.title}</h1>
               <div className="flex items-center space-x-3 mt-1">
                 <Badge variant="info">
-                  {page.components.length} components
+                  {page.components?.length || 0} components
                 </Badge>
                 {page.metadata && (
                   <Badge variant={page.metadata.bandwidthValid ? 'success' : 'warning'}>
@@ -251,7 +251,7 @@ const PageViewer: React.FC = () => {
       <div className="max-w-4xl mx-auto p-6">
         <Card>
           <CardContent className="p-6">
-            {page.components.length > 0 ? (
+            {page.components?.length > 0 ? (
               <div
                 className="page-content"
                 style={{
@@ -262,7 +262,7 @@ const PageViewer: React.FC = () => {
                   minHeight: '400px'
                 }}
               >
-                {page.components.map((component) => (
+                {page.components?.map((component) => (
                   <div
                     key={component.id}
                     style={{
@@ -308,7 +308,7 @@ const PageViewer: React.FC = () => {
               )}
               <div>
                 <span className="text-gray-400">Components:</span>
-                <span className="ml-2">{page.components.length}</span>
+                <span className="ml-2">{page.components?.length || 0}</span>
               </div>
               {page.layout && (
                 <div>

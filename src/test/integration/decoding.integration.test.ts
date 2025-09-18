@@ -32,7 +32,24 @@ describe('Decoding Chain Integration', () => {
       crypto
     });
 
-    // Crypto doesn't need init
+    // Mock crypto manager to avoid indexedDB issues
+    const mockKeyPair = {
+      publicKey: {} as CryptoKey,
+      privateKey: {} as CryptoKey,
+      publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMOCK\n-----END PUBLIC KEY-----',
+      callsign: 'TEST1',
+      created: Date.now(),
+      expires: Date.now() + 365 * 24 * 60 * 60 * 1000
+    };
+
+    (crypto as any).keyPair = mockKeyPair;
+    vi.spyOn(crypto, 'generateKeyPair').mockImplementation(async (callsign: string) => {
+      (crypto as any).keyPair = mockKeyPair;
+      return mockKeyPair;
+    });
+    vi.spyOn(crypto, 'sign').mockResolvedValue('mock-signature');
+    vi.spyOn(crypto, 'verify').mockResolvedValue(true);
+    vi.spyOn(crypto, 'close').mockResolvedValue();
   });
 
   afterEach(() => {

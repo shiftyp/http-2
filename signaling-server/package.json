@@ -1,12 +1,27 @@
 {
   "name": "ham-radio-webrtc-signaling",
   "version": "1.0.0",
-  "description": "Native WebSocket signaling server for ham radio WebRTC connections",
+  "description": "Native WebSocket signaling server for ham radio WebRTC connections with CQ beacon registry",
   "main": "server.js",
+  "bin": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test.js"
+    "test": "npm run test:contract && npm run test:integration && npm run test:unit",
+    "test:contract": "vitest run tests/contract",
+    "test:integration": "vitest run tests/integration",
+    "test:unit": "vitest run tests/unit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "build:linux-x64": "pkg . --targets node18-linux-x64 --output dist/signaling-server-linux-x64",
+    "build:macos-x64": "pkg . --targets node18-macos-x64 --output dist/signaling-server-macos-x64",
+    "build:macos-arm64": "pkg . --targets node18-macos-arm64 --output dist/signaling-server-macos-arm64",
+    "build:win-x64": "pkg . --targets node18-win-x64 --output dist/signaling-server-win-x64",
+    "build:linux-arm64": "pkg . --targets node18-linux-arm64 --output dist/signaling-server-linux-arm64",
+    "build:all": "npm run build:linux-x64 && npm run build:macos-x64 && npm run build:win-x64",
+    "build:with-pwa": "npm run copy:pwa && npm run build:all",
+    "copy:pwa": "cp -r ../dist/* pwa-assets/ 2>/dev/null || echo 'PWA build not found, run npm run build in parent directory first'",
+    "serve:downloads": "node src/download-server.js"
   },
   "keywords": [
     "ham-radio",
@@ -18,9 +33,40 @@
   "author": "Ham Radio WebRTC Project",
   "license": "MIT",
   "dependencies": {
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^12.2.0",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.3",
+    "msgpack-lite": "^0.1.26",
     "ws": "^8.14.2"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@vitest/ui": "^1.2.0",
+    "eslint": "^8.56.0",
+    "pkg": "^5.8.1",
+    "prettier": "^3.2.4",
+    "supertest": "^6.3.4",
+    "vitest": "^1.2.0"
+  },
+  "pkg": {
+    "scripts": [
+      "src/**/*.js",
+      "server.js"
+    ],
+    "assets": [
+      "package.json",
+      "node_modules/better-sqlite3/build/Release/**/*",
+      "pwa-assets/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-macos-x64",
+      "node18-win-x64",
+      "node18-linux-arm64",
+      "node18-macos-arm64"
+    ],
+    "outputPath": "dist"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

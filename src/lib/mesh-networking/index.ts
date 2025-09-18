@@ -81,9 +81,45 @@ export class AODVRouter {
   constructor(callsign: string) {
     this.myCallsign = callsign;
     this.myAddress = this.generateMeshAddress(callsign);
-    
+
     // Periodic route table maintenance
     setInterval(() => this.maintainRoutes(), 30000);
+  }
+
+  getAddress(): string {
+    return this.myAddress;
+  }
+
+  addNeighbor(address: string, signalStrength: number, lastSeen: number): void {
+    // Add direct neighbor to routing table with hop count 1
+    const route: RoutingTableEntry = {
+      destination: address,
+      nextHop: address,
+      metric: Math.abs(signalStrength), // Use signal strength as metric (lower is better)
+      sequenceNumber: 0,
+      lastUpdated: lastSeen,
+      linkQuality: this.calculateLinkQuality(signalStrength),
+      hopCount: 1
+    };
+    this.routingTable.set(address, route);
+  }
+
+  removeNeighbor(address: string): void {
+    // Remove direct neighbor and any routes through them
+    const toRemove: string[] = [];
+    for (const [dest, route] of this.routingTable) {
+      if (route.nextHop === address || dest === address) {
+        toRemove.push(dest);
+      }
+    }
+    toRemove.forEach(dest => this.routingTable.delete(dest));
+  }
+
+  private calculateLinkQuality(signalStrength: number): number {
+    // Convert signal strength to link quality percentage
+    // -30 dBm = 100%, -90 dBm = 0%
+    const quality = Math.max(0, Math.min(100, ((signalStrength + 90) / 60) * 100));
+    return Math.round(quality);
   }
 
   private generateMeshAddress(callsign: string): string {

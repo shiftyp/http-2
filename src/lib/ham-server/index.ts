@@ -7,6 +7,7 @@ import { logbook } from '../logbook';
 import { HamRadioCompressor } from '../compression';
 import { cryptoManager } from '../crypto';
 import { renderComponentForRadio, renderComponentFromRadio, ProtobufComponentData } from '../react-renderer';
+import { CallsignValidator } from './callsign-validator';
 import React from 'react';
 
 export interface HTTPRequest {
@@ -42,6 +43,7 @@ export interface ServerConfig {
   compressionThreshold: number;
   cacheDuration: number;
   requireSignatures: boolean;
+  requireLicense: boolean;
   useProtobuf: boolean;
   componentRegistry: Record<string, React.ComponentType<any>>;
 }
@@ -65,6 +67,7 @@ export class HTTPServer {
       compressionThreshold: config.compressionThreshold || 1024,      // Compress responses > 1KB
       cacheDuration: config.cacheDuration || 300000,           // 5 minute cache
       requireSignatures: config.requireSignatures || false,        // Digital signatures optional
+      requireLicense: config.requireLicense !== false,       // License validation enabled by default
       useProtobuf: config.useProtobuf || true,               // Enable protobuf by default
       componentRegistry: config.componentRegistry || {},      // React components for protobuf
       gridSquare: config.gridSquare,
@@ -221,7 +224,7 @@ export class HTTPServer {
     if (!this.isActive) {
       return this.createResponse(503, 'Service Unavailable', 'Server not active');
     }
-    
+
     // Check request cache (idempotency)
     const cacheKey = `${request.requestId}:${request.callsign}`;
     if (this.requestCache.has(cacheKey)) {
@@ -229,10 +232,33 @@ export class HTTPServer {
       cached.headers.set('X-Cache', 'HIT');
       return cached;
     }
-    
+
+    // Validate license if required
+    if (this.config.requireLicense) {
+      const callsignValidation = CallsignValidator.validate(request.callsign);
+      const allowedMethods = CallsignValidator.getAllowedMethods(request.callsign);
+
+      // Check if the request method is allowed for this callsign
+      if (!allowedMethods.includes(request.method)) {
+        const response = this.createResponse(
+          403,
+          'Forbidden',
+          `Unlicensed stations (${request.callsign}) are restricted to GET, HEAD, and OPTIONS requests only. ` +
+          `Your callsign appears to be: ${callsignValidation.type || 'unlicensed'}.`
+        );
+        response.headers.set('X-License-Status', callsignValidation.licensed ? 'licensed' : 'unlicensed');
+        response.headers.set('X-Allowed-Methods', allowedMethods.join(', '));
+        return response;
+      }
+
+      // Add license status to headers for logging
+      request.headers.set('X-License-Status', callsignValidation.licensed ? 'licensed' : 'unlicensed');
+      request.headers.set('X-Callsign-Type', callsignValidation.type || 'unknown');
+    }
+
     // Validate request size
     if (request.body && request.body.length > this.config.maxBodySize) {
-      return this.createResponse(413, 'Payload Too Large', 
+      return this.createResponse(413, 'Payload Too Large',
         `Maximum body size: ${this.config.maxBodySize} bytes`);
     }
     

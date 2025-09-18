@@ -248,6 +248,9 @@ export class HTTPProtocol {
   private currentVDOM: VirtualDOM | null = null;
   private callsign: string;
   private requestHandler?: (request: HTTPRequest, respond: (response: HTTPResponse) => void) => void;
+  private radio: any;
+  private meshNetwork: any;
+  private responseHandlers: Map<number, { resolve: (response: any) => void; reject: (error: any) => void }> = new Map();
 
   constructor(options: { callsign: string; compressor?: HamRadioCompressor; crypto?: any; modemConfig?: any }) {
     this.callsign = options.callsign;
@@ -295,7 +298,53 @@ export class HTTPProtocol {
     };
   }
 
+  async handleReceivedData(data: Uint8Array): Promise<void> {
+    // Try to parse as binary packet first
+    if (data.length >= 16) {
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      const version = view.getUint8(0);
+
+      // If it looks like a binary packet (version 1)
+      if (version === 1) {
+        try {
+          const packet = this.deserializePacket(data);
+          if (packet) {
+            return this.handlePacket(packet);
+          }
+        } catch (error) {
+          console.error('Failed to deserialize binary packet:', error);
+        }
+      }
+    }
+
+    // Try to parse as JSON
+    try {
+      const jsonStr = new TextDecoder().decode(data);
+      const packet = JSON.parse(jsonStr) as HTTPPacket;
+      return this.handlePacket(packet);
+    } catch (error) {
+      console.error('Failed to parse received data as JSON:', error);
+    }
+  }
+
   async handlePacket(packet: HTTPPacket): Promise<void> {
+    // Handle response packets
+    if (packet.header && packet.header.type === 'RESPONSE') {
+      const handler = this.responseHandlers.get(packet.sequence);
+      if (handler) {
+        try {
+          const response = JSON.parse(new TextDecoder().decode(packet.payload)) as HTTPResponse;
+          handler.resolve(response);
+          this.responseHandlers.delete(packet.sequence);
+        } catch (error) {
+          handler.reject(error);
+          this.responseHandlers.delete(packet.sequence);
+        }
+      }
+      return;
+    }
+
+    // Handle request packets
     if (packet.header && packet.header.type === 'REQUEST' && this.requestHandler) {
       try {
         const request = JSON.parse(new TextDecoder().decode(packet.payload)) as HTTPRequest;
@@ -627,18 +676,18 @@ export class HTTPProtocol {
   }
 
   private deserializePacket(data: Uint8Array): HTTPPacket {
-    const view = new DataView(data.buffer);
-    
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
     const version = view.getUint8(0);
     const type = view.getUint8(1);
-    
+
     const idBytes = data.slice(2, 10);
     const id = new TextDecoder().decode(idBytes).replace(/\0/g, '');
-    
+
     const sequence = view.getUint16(10, true);
     const flags = view.getUint8(12);
     const payloadLength = view.getUint16(13, true);
-    
+
     const typeMap: Record<number, HTTPPacket['type']> = {
       0x01: 'request',
       0x02: 'response',
@@ -646,7 +695,14 @@ export class HTTPProtocol {
       0x04: 'stream',
       0x05: 'schema'
     };
-    
+
+    const headerTypeMap: Record<number, 'REQUEST' | 'RESPONSE' | 'DELTA' | 'STREAM'> = {
+      0x01: 'REQUEST',
+      0x02: 'RESPONSE',
+      0x03: 'DELTA',
+      0x04: 'STREAM'
+    };
+
     return {
       version,
       type: typeMap[type],
@@ -660,7 +716,15 @@ export class HTTPProtocol {
         deltaUpdate: !!(flags & 0x10),
         protobufEncoded: !!(flags & 0x20)
       },
-      payload: data.slice(16, 16 + payloadLength)
+      payload: data.slice(16, 16 + payloadLength),
+      header: {
+        version,
+        type: headerTypeMap[type] || 'REQUEST',
+        source: '', // Will be filled from payload if needed
+        destination: '',
+        timestamp: Date.now(),
+        sequence
+      }
     };
   }
 
@@ -774,16 +838,145 @@ export class HTTPProtocol {
   // Methods expected by integration tests
   setRadio(radio: any): void {
     // Store radio instance for transmission
-    // This would be used for actual radio transmission in production
+    this.radio = radio;
   }
 
   setMeshNetwork(meshNetwork: any): void {
     // Store mesh network for routing
-    // This would be used for mesh routing in production
+    this.meshNetwork = meshNetwork;
   }
 
   onRequest(handler: (request: any, respond: (response: any) => void) => void): void {
     // Store request handler (alias for setRequestHandler)
     this.requestHandler = handler;
+  }
+
+  // Overloaded sendRequest for integration tests
+  async sendRequest(request: HTTPRequest, destination: string): Promise<HTTPResponse>;
+  async sendRequest(
+    method: string,
+    path: string,
+    headers: Record<string, string>,
+    body?: any,
+    useProtocolBuffers?: boolean
+  ): Promise<void>;
+  async sendRequest(
+    requestOrMethod: HTTPRequest | string,
+    destinationOrPath?: string,
+    headers?: Record<string, string>,
+    body?: any,
+    useProtocolBuffers: boolean = false
+  ): Promise<HTTPResponse | void> {
+    // Handle the integration test signature
+    if (typeof requestOrMethod === 'object' && destinationOrPath) {
+      const request = requestOrMethod as HTTPRequest;
+      const destination = destinationOrPath;
+
+      return new Promise((resolve, reject) => {
+        const packet = this.createPacket('REQUEST', request, destination);
+
+        // Store response handler
+        this.responseHandlers.set(packet.sequence, { resolve, reject });
+
+        // Set timeout for response
+        setTimeout(() => {
+          if (this.responseHandlers.has(packet.sequence)) {
+            this.responseHandlers.delete(packet.sequence);
+            reject(new Error('Request timeout'));
+          }
+        }, 10000);
+
+        // Transmit packet
+        if (this.radio) {
+          // Serialize packet for radio transmission
+          const serialized = this.serializePacket(packet);
+          this.radio.transmit(serialized);
+        } else if (this.meshNetwork) {
+          this.meshNetwork.sendPacket(packet, destination);
+        } else {
+          this.transmitPacket(packet);
+        }
+      });
+    }
+
+    // Handle original signature
+    const method = requestOrMethod as string;
+    const path = destinationOrPath as string;
+    const requestPayload = {
+      method,
+      path,
+      headers: headers || {},
+      body: body || undefined,
+      timestamp: Date.now()
+    };
+
+    if (useProtocolBuffers && body) {
+      // Protocol buffer mode: send schema first, then encoded data
+      const schema = protocolBuffers.generateSchema(body, 'RequestData');
+      const schemaTransmission = protocolBuffers.createSchemaTransmission(schema);
+
+      // Send schema packet first
+      const schemaPayload = new TextEncoder().encode(JSON.stringify(schemaTransmission));
+      const schemaPacket: HTTPPacket = {
+        version: 1,
+        type: 'schema',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: false,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: false
+        },
+        payload: schemaPayload
+      };
+
+      // Transmit schema
+      await this.transmitPacket(schemaPacket);
+
+      // Encode the actual data
+      const encodedData = protocolBuffers.encode(body, schema.id);
+
+      // Create packet with the raw binary data
+      const dataPacket: HTTPPacket = {
+        version: 1,
+        type: 'request',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: false,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: true
+        },
+        payload: encodedData.data // Already binary
+      };
+
+      await this.transmitPacket(dataPacket);
+    } else {
+      const payload = new TextEncoder().encode(JSON.stringify(requestPayload));
+
+      const packet: HTTPPacket = {
+        version: 1,
+        type: 'request',
+        id: this.generatePacketId(),
+        sequence: this.sequenceNumber++,
+        flags: {
+          compressed: false,
+          encrypted: false,
+          fragmented: false,
+          lastFragment: true,
+          deltaUpdate: false,
+          protobufEncoded: false
+        },
+        payload
+      };
+
+      await this.transmitPacket(packet);
+    }
   }
 }

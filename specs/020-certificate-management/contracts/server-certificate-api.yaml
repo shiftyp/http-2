@@ -1,0 +1,849 @@
+openapi: 3.0.3
+info:
+  title: Server Certificate Management API
+  description: API for server-side certificate approval and management operations
+  version: 1.0.0
+  contact:
+    name: Amateur Radio HTTP Project
+
+servers:
+  - url: wss://signaling.example.com/api
+    description: WebSocket signaling server
+  - url: https://signaling.example.com/api
+    description: HTTP REST API
+
+paths:
+  /certificates/requests:
+    get:
+      summary: List pending certificate requests
+      description: Retrieve all pending certificate approval requests for server operators
+      operationId: listCertificateRequests
+      parameters:
+        - name: status
+          in: query
+          description: Filter by request status
+          schema:
+            type: string
+            enum: [pending, approved, rejected, expired]
+            default: pending
+        - name: callsign
+          in: query
+          description: Filter by requesting callsign
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+        - name: limit
+          in: query
+          description: Maximum number of requests to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          description: Number of requests to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of certificate requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CertificateRequest'
+                  total:
+                    type: integer
+                    description: Total number of requests matching criteria
+                  hasMore:
+                    type: boolean
+                    description: Whether there are more requests available
+        '401':
+          description: Unauthorized - server operator authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Submit certificate request
+      description: Submit a new certificate for approval (called by clients)
+      operationId: submitCertificateRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateRequestSubmission'
+      responses:
+        '201':
+          description: Certificate request submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateRequest'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/requests/{requestId}:
+    get:
+      summary: Get certificate request details
+      description: Retrieve detailed information about a specific certificate request
+      operationId: getCertificateRequest
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificate request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateRequest'
+        '404':
+          description: Certificate request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Review certificate request
+      description: Approve or reject a pending certificate request
+      operationId: reviewCertificateRequest
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateReview'
+      responses:
+        '200':
+          description: Certificate request reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificateRequest'
+        '400':
+          description: Invalid review data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Certificate request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - server operator authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/bans:
+    get:
+      summary: List banned certificates
+      description: Retrieve list of banned certificates for this server
+      operationId: listBannedCertificates
+      parameters:
+        - name: callsign
+          in: query
+          description: Filter by banned callsign
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+        - name: banType
+          in: query
+          description: Filter by ban type
+          schema:
+            type: string
+            enum: [server, network]
+        - name: isActive
+          in: query
+          description: Filter by ban status
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of banned certificates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BanRecord'
+
+    post:
+      summary: Ban certificate
+      description: Create a new certificate ban
+      operationId: banCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BanCreate'
+      responses:
+        '201':
+          description: Certificate banned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BanRecord'
+        '400':
+          description: Invalid ban data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - server operator authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/bans/{banId}:
+    delete:
+      summary: Revoke certificate ban
+      description: Remove or revoke an existing certificate ban
+      operationId: revokeBan
+      parameters:
+        - name: banId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Ban revoked successfully
+        '404':
+          description: Ban not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - server operator authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/trust-export:
+    get:
+      summary: Export trusted certificates
+      description: Export the server's trusted certificate list for federation
+      operationId: exportTrustedCertificates
+      parameters:
+        - name: format
+          in: query
+          description: Export format
+          schema:
+            type: string
+            enum: [json, compressed]
+            default: compressed
+        - name: includeChains
+          in: query
+          description: Include trust chain information
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Trusted certificates exported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedCertificateExport'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /certificates/trust-import:
+    post:
+      summary: Import trusted certificates
+      description: Import trusted certificates from another server
+      operationId: importTrustedCertificates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrustedCertificateImport'
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Certificates imported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: integer
+                    description: Number of certificates imported
+                  skipped:
+                    type: integer
+                    description: Number of certificates skipped
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                    description: Import errors
+        '400':
+          description: Invalid import data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    CertificateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique request identifier
+        certificateId:
+          type: string
+          description: Reference to certificate
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Requesting station callsign
+        serverCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server receiving the request
+        stationInfo:
+          $ref: '#/components/schemas/StationInfo'
+        certificateType:
+          type: string
+          enum: [self-signed, arrl, lotw]
+          description: Type of certificate
+        licenseClass:
+          type: string
+          enum: [extra, advanced, general, technician, novice]
+          description: Amateur radio license class
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+          description: Maidenhead grid locator
+        publicKeyPem:
+          type: string
+          description: Public key for verification
+        captchaVerified:
+          type: boolean
+          description: Whether CAPTCHA has been verified
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+          description: Request status
+        submittedAt:
+          type: string
+          format: date-time
+          description: Submission timestamp
+        reviewedAt:
+          type: string
+          format: date-time
+          description: Review timestamp
+        reviewedBy:
+          type: string
+          description: Server operator who reviewed
+        approvalRecord:
+          $ref: '#/components/schemas/ApprovalRecord'
+        rejectionReason:
+          type: string
+          description: Reason for rejection
+        requestSource:
+          type: string
+          enum: [auto, manual]
+          description: How the request was initiated
+        retryCount:
+          type: integer
+          description: Number of submission attempts
+        expiresAt:
+          type: string
+          format: date-time
+          description: Request expiration time
+      required:
+        - id
+        - callsign
+        - serverCallsign
+        - certificateType
+        - licenseClass
+        - status
+        - submittedAt
+
+    CertificateRequestSubmission:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Requesting station callsign
+        certificateType:
+          type: string
+          enum: [self-signed, arrl, lotw]
+          description: Type of certificate
+        licenseClass:
+          type: string
+          enum: [extra, advanced, general, technician, novice]
+          description: Amateur radio license class
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+          description: Maidenhead grid locator
+        publicKeyPem:
+          type: string
+          description: Public key for verification
+        stationInfo:
+          $ref: '#/components/schemas/StationInfo'
+        captchaSolution:
+          $ref: '#/components/schemas/SignedCAPTCHASolution'
+      required:
+        - callsign
+        - certificateType
+        - licenseClass
+        - publicKeyPem
+        - captchaSolution
+
+    CertificateReview:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+          description: Approval decision
+        assignedTrustLevel:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Trust level to assign
+        trustJustification:
+          type: string
+          description: Reason for trust level assignment
+        conditions:
+          type: array
+          items:
+            type: string
+          description: Conditions of approval
+        restrictions:
+          type: array
+          items:
+            type: string
+          description: Usage restrictions
+        expiresAt:
+          type: string
+          format: date-time
+          description: Approval expiration time
+        reviewNotes:
+          type: string
+          description: Private review notes
+        publicNotes:
+          type: string
+          description: Notes visible to certificate holder
+        rejectionReason:
+          type: string
+          description: Reason for rejection (if rejected)
+      required:
+        - decision
+
+    StationInfo:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        licenseClass:
+          type: string
+          enum: [extra, advanced, general, technician, novice]
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+        location:
+          type: string
+          description: Human-readable location
+        equipment:
+          type: string
+          description: Radio equipment description
+        antenna:
+          type: string
+          description: Antenna system description
+        power:
+          type: number
+          description: Transmit power in watts
+      required:
+        - callsign
+        - licenseClass
+
+    SignedCAPTCHASolution:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique solution identifier
+        challengeId:
+          type: string
+          description: Reference to CAPTCHA challenge
+        answer:
+          type: string
+          description: The submitted answer
+        solutionHash:
+          type: string
+          description: SHA-256 hash of the answer
+        solvedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Callsign of solver
+        signingCertificateId:
+          type: string
+          description: Certificate used to sign
+        signature:
+          type: string
+          description: Digital signature of solution
+        solvedAt:
+          type: string
+          format: date-time
+          description: Solution timestamp
+      required:
+        - id
+        - challengeId
+        - answer
+        - solvedBy
+        - signature
+
+    ApprovalRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique approval record identifier
+        requestId:
+          type: string
+          description: Reference to certificate request
+        decision:
+          type: string
+          enum: [approved, rejected]
+          description: Approval decision
+        approvedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server operator callsign
+        approvedAt:
+          type: string
+          format: date-time
+          description: Approval timestamp
+        assignedTrustLevel:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Assigned trust level
+        trustJustification:
+          type: string
+          description: Reason for trust level
+        conditions:
+          type: array
+          items:
+            type: string
+          description: Conditions of approval
+        restrictions:
+          type: array
+          items:
+            type: string
+          description: Usage restrictions
+        expiresAt:
+          type: string
+          format: date-time
+          description: Approval expiration
+        reviewNotes:
+          type: string
+          description: Private review notes
+        publicNotes:
+          type: string
+          description: Public notes
+        reviewDuration:
+          type: integer
+          description: Review time in milliseconds
+        isAppeal:
+          type: boolean
+          description: Whether this is an appeal
+      required:
+        - id
+        - requestId
+        - decision
+        - approvedBy
+        - approvedAt
+        - assignedTrustLevel
+
+    BanRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique ban record identifier
+        certificateId:
+          type: string
+          description: Reference to banned certificate
+        bannedCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Banned callsign
+        banningServer:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server that issued the ban
+        bannedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Operator who issued the ban
+        bannedAt:
+          type: string
+          format: date-time
+          description: Ban timestamp
+        banType:
+          type: string
+          enum: [server, network]
+          description: Ban scope
+        severity:
+          type: string
+          enum: [warning, temporary, permanent]
+          description: Ban severity
+        expiresAt:
+          type: string
+          format: date-time
+          description: Ban expiration (for temporary bans)
+        reason:
+          type: string
+          description: Reason for ban
+        evidence:
+          type: array
+          items:
+            type: string
+          description: Supporting evidence
+        broadcastEnabled:
+          type: boolean
+          description: Whether to broadcast ban
+        acknowledgedBy:
+          type: array
+          items:
+            type: string
+          description: Servers that acknowledged the ban
+        appealAllowed:
+          type: boolean
+          description: Whether appeals are accepted
+        appealDeadline:
+          type: string
+          format: date-time
+          description: Deadline for appeals
+        isActive:
+          type: boolean
+          description: Whether ban is active
+        revokedAt:
+          type: string
+          format: date-time
+          description: Ban revocation timestamp
+        revokedBy:
+          type: string
+          description: Who revoked the ban
+      required:
+        - id
+        - bannedCallsign
+        - banningServer
+        - bannedBy
+        - bannedAt
+        - banType
+        - severity
+        - reason
+        - isActive
+
+    BanCreate:
+      type: object
+      properties:
+        certificateId:
+          type: string
+          description: Certificate to ban
+        bannedCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Callsign to ban
+        banType:
+          type: string
+          enum: [server, network]
+          description: Ban scope
+        severity:
+          type: string
+          enum: [warning, temporary, permanent]
+          description: Ban severity
+        reason:
+          type: string
+          description: Reason for ban
+        evidence:
+          type: array
+          items:
+            type: string
+          description: Supporting evidence
+        expiresAt:
+          type: string
+          format: date-time
+          description: Ban expiration (for temporary bans)
+        broadcastEnabled:
+          type: boolean
+          default: true
+          description: Whether to broadcast ban
+        appealAllowed:
+          type: boolean
+          default: true
+          description: Whether appeals are accepted
+      required:
+        - bannedCallsign
+        - banType
+        - severity
+        - reason
+
+    TrustedCertificateExport:
+      type: object
+      properties:
+        serverCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Exporting server callsign
+        exportedAt:
+          type: string
+          format: date-time
+          description: Export timestamp
+        certificates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedCertificateEntry'
+        trustChains:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustChainEntry'
+        signature:
+          type: string
+          description: Export signature for verification
+
+    TrustedCertificateEntry:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        certificateType:
+          type: string
+          enum: [self-signed, arrl, lotw]
+        trustLevel:
+          type: integer
+          minimum: 0
+          maximum: 3
+        publicKeyPem:
+          type: string
+        approvedAt:
+          type: string
+          format: date-time
+        approvedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+
+    TrustChainEntry:
+      type: object
+      properties:
+        rootCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        leafCallsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+        chainPath:
+          type: array
+          items:
+            type: string
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        validatedAt:
+          type: string
+          format: date-time
+
+    TrustedCertificateImport:
+      type: object
+      properties:
+        sourceServer:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Source server callsign
+        importData:
+          $ref: '#/components/schemas/TrustedCertificateExport'
+        verifySignature:
+          type: boolean
+          default: true
+          description: Whether to verify export signature
+        mergeStrategy:
+          type: string
+          enum: [replace, merge, append]
+          default: merge
+          description: How to handle conflicts
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - error
+        - code
+
+  securitySchemes:
+    serverOperatorAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Server operator authentication using signed JWT
+
+security:
+  - serverOperatorAuth: []

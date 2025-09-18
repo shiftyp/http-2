@@ -1,0 +1,754 @@
+openapi: 3.0.3
+info:
+  title: Trust Chain Federation API
+  description: API for certificate trust chain validation and federation between servers
+  version: 1.0.0
+  contact:
+    name: Amateur Radio HTTP Project
+
+servers:
+  - url: https://signaling.example.com/api
+    description: Trust chain server
+
+paths:
+  /trust-chain/{callsign}:
+    get:
+      summary: Get certificate trust chain
+      description: Retrieve the trust chain for a specific callsign
+      operationId: getTrustChain
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+          description: Callsign to get trust chain for
+        - name: maxDepth
+          in: query
+          description: Maximum chain depth to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 5
+        - name: includeExpired
+          in: query
+          description: Include expired certificates in chain
+          schema:
+            type: boolean
+            default: false
+        - name: requireConsensus
+          in: query
+          description: Require consensus validation
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Trust chain retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChain'
+        '404':
+          description: No trust chain found for callsign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trust-chain/{callsign}/validate:
+    post:
+      summary: Validate certificate trust chain
+      description: Validate a trust chain for a certificate
+      operationId: validateTrustChain
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                certificateId:
+                  type: string
+                  description: Certificate to validate
+                proposedChain:
+                  type: array
+                  items:
+                    type: string
+                  description: Proposed trust chain (certificate IDs)
+                trustRequirement:
+                  type: integer
+                  minimum: 0
+                  maximum: 3
+                  description: Minimum required trust level
+                consensusThreshold:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 2
+                  description: Required number of servers for consensus
+              required:
+                - certificateId
+      responses:
+        '200':
+          description: Trust chain validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChainValidation'
+        '400':
+          description: Invalid validation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trust-chain/{callsign}/establish:
+    post:
+      summary: Establish new trust chain
+      description: Establish a new trust relationship
+      operationId: establishTrustChain
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rootCertificateId:
+                  type: string
+                  description: Root certificate for trust chain
+                leafCertificateId:
+                  type: string
+                  description: End certificate for trust chain
+                intermediates:
+                  type: array
+                  items:
+                    type: string
+                  description: Intermediate certificate IDs
+                trustFactors:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TrustFactor'
+                  description: Factors contributing to trust
+                establishedBy:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Server establishing the trust
+              required:
+                - rootCertificateId
+                - leafCertificateId
+                - establishedBy
+      responses:
+        '201':
+          description: Trust chain established successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChain'
+        '400':
+          description: Invalid trust chain data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Trust chain already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trust-chain/consensus:
+    get:
+      summary: Get consensus status
+      description: Get consensus status for trust chains
+      operationId: getConsensusStatus
+      parameters:
+        - name: callsign
+          in: query
+          description: Filter by callsign
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+        - name: minConsensus
+          in: query
+          description: Minimum consensus count
+          schema:
+            type: integer
+            minimum: 1
+            default: 2
+      responses:
+        '200':
+          description: Consensus status retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsensusStatus'
+
+    post:
+      summary: Submit consensus vote
+      description: Submit a consensus vote for a trust chain
+      operationId: submitConsensusVote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trustChainId:
+                  type: string
+                  description: Trust chain to vote on
+                vote:
+                  type: string
+                  enum: [accept, reject, abstain]
+                  description: Consensus vote
+                voterServer:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Server submitting vote
+                justification:
+                  type: string
+                  description: Reason for vote
+                trustScore:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  description: Assigned trust score
+              required:
+                - trustChainId
+                - vote
+                - voterServer
+      responses:
+        '200':
+          description: Consensus vote submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsensusVote'
+        '400':
+          description: Invalid vote data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trust-chain/federation:
+    get:
+      summary: List federated servers
+      description: Get list of servers participating in trust federation
+      operationId: getFederatedServers
+      responses:
+        '200':
+          description: Federated servers list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FederatedServer'
+
+    post:
+      summary: Join trust federation
+      description: Join the trust federation network
+      operationId: joinFederation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serverCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Server callsign joining federation
+                serverCertificate:
+                  type: string
+                  description: Server certificate for verification
+                endorsements:
+                  type: array
+                  items:
+                    type: string
+                  description: Endorsements from existing federation members
+                capabilities:
+                  type: array
+                  items:
+                    type: string
+                  enum: [consensus_voting, trust_validation, certificate_storage]
+                  description: Server capabilities
+              required:
+                - serverCallsign
+                - serverCertificate
+      responses:
+        '201':
+          description: Joined federation successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FederatedServer'
+        '400':
+          description: Invalid federation request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trust-chain/metrics:
+    get:
+      summary: Get trust chain metrics
+      description: Get metrics about trust chain performance and health
+      operationId: getTrustChainMetrics
+      parameters:
+        - name: timeRange
+          in: query
+          description: Time range for metrics
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+            default: 24h
+      responses:
+        '200':
+          description: Trust chain metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustChainMetrics'
+        '401':
+          description: Unauthorized - server operator access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    TrustChain:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique trust chain identifier
+        rootCertificateId:
+          type: string
+          description: Root certificate in the chain
+        leafCertificateId:
+          type: string
+          description: End certificate in the chain
+        chainPath:
+          type: array
+          items:
+            type: string
+          description: Certificate IDs from root to leaf
+        chainDepth:
+          type: integer
+          description: Number of certificates in chain
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Calculated trust score
+        trustFactors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustFactor'
+          description: Factors contributing to trust score
+        isValid:
+          type: boolean
+          description: Whether chain is currently valid
+        lastValidated:
+          type: string
+          format: date-time
+          description: Last validation timestamp
+        validatedBy:
+          type: array
+          items:
+            type: string
+          description: Servers that validated this chain
+        consensusCount:
+          type: integer
+          description: Number of servers agreeing on this chain
+        consensusThreshold:
+          type: integer
+          description: Required consensus for acceptance
+        establishedAt:
+          type: string
+          format: date-time
+          description: When chain was established
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: When chain was last used
+        expiresAt:
+          type: string
+          format: date-time
+          description: Chain expiration time
+        refreshInterval:
+          type: integer
+          description: Refresh interval in seconds
+        pathReliability:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Path reliability score
+        pathLatency:
+          type: integer
+          description: Average validation latency in milliseconds
+      required:
+        - id
+        - rootCertificateId
+        - leafCertificateId
+        - chainPath
+        - chainDepth
+        - trustScore
+        - isValid
+        - establishedAt
+
+    TrustFactor:
+      type: object
+      properties:
+        factor:
+          type: string
+          description: Name of trust factor
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Weight in trust calculation
+        value:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Factor value
+        description:
+          type: string
+          description: Human-readable description
+      required:
+        - factor
+        - weight
+        - value
+        - description
+
+    TrustChainValidation:
+      type: object
+      properties:
+        chainId:
+          type: string
+          description: Trust chain identifier
+        isValid:
+          type: boolean
+          description: Whether the chain is valid
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Calculated trust score
+        validationResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationResult'
+          description: Detailed validation results
+        consensusStatus:
+          $ref: '#/components/schemas/ConsensusStatus'
+        validatedAt:
+          type: string
+          format: date-time
+          description: Validation timestamp
+        validatedBy:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server that performed validation
+        recommendation:
+          type: string
+          enum: [accept, reject, investigate]
+          description: Validation recommendation
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Validation warnings
+        errors:
+          type: array
+          items:
+            type: string
+          description: Validation errors
+      required:
+        - chainId
+        - isValid
+        - trustScore
+        - validatedAt
+        - validatedBy
+        - recommendation
+
+    ValidationResult:
+      type: object
+      properties:
+        step:
+          type: string
+          description: Validation step name
+        passed:
+          type: boolean
+          description: Whether the step passed
+        details:
+          type: string
+          description: Step details
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Step score contribution
+        duration:
+          type: integer
+          description: Step duration in milliseconds
+      required:
+        - step
+        - passed
+        - score
+
+    ConsensusStatus:
+      type: object
+      properties:
+        trustChainId:
+          type: string
+          description: Trust chain identifier
+        totalVotes:
+          type: integer
+          description: Total number of votes
+        acceptVotes:
+          type: integer
+          description: Number of accept votes
+        rejectVotes:
+          type: integer
+          description: Number of reject votes
+        abstainVotes:
+          type: integer
+          description: Number of abstain votes
+        consensusReached:
+          type: boolean
+          description: Whether consensus has been reached
+        consensusResult:
+          type: string
+          enum: [accepted, rejected, pending]
+          description: Consensus result
+        requiredVotes:
+          type: integer
+          description: Required votes for consensus
+        votingDeadline:
+          type: string
+          format: date-time
+          description: Voting deadline
+        participatingServers:
+          type: array
+          items:
+            type: string
+          description: Servers participating in consensus
+      required:
+        - trustChainId
+        - totalVotes
+        - consensusReached
+        - consensusResult
+
+    ConsensusVote:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique vote identifier
+        trustChainId:
+          type: string
+          description: Trust chain being voted on
+        vote:
+          type: string
+          enum: [accept, reject, abstain]
+          description: Vote decision
+        voterServer:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server that cast the vote
+        justification:
+          type: string
+          description: Reason for vote
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Assigned trust score
+        votedAt:
+          type: string
+          format: date-time
+          description: Vote timestamp
+        signature:
+          type: string
+          description: Vote signature for verification
+      required:
+        - id
+        - trustChainId
+        - vote
+        - voterServer
+        - votedAt
+
+    FederatedServer:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Server callsign
+        endpoint:
+          type: string
+          format: uri
+          description: Server API endpoint
+        publicKey:
+          type: string
+          description: Server public key
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Server capabilities
+        trustLevel:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Federation trust level
+        joinedAt:
+          type: string
+          format: date-time
+          description: Federation join timestamp
+        lastSeen:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        endorsements:
+          type: array
+          items:
+            type: string
+          description: Endorsing servers
+        reputation:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Server reputation score
+        isActive:
+          type: boolean
+          description: Whether server is currently active
+      required:
+        - callsign
+        - endpoint
+        - publicKey
+        - capabilities
+        - trustLevel
+        - joinedAt
+        - isActive
+
+    TrustChainMetrics:
+      type: object
+      properties:
+        totalChains:
+          type: integer
+          description: Total number of trust chains
+        validChains:
+          type: integer
+          description: Number of valid trust chains
+        averageTrustScore:
+          type: number
+          description: Average trust score across all chains
+        averageDepth:
+          type: number
+          description: Average chain depth
+        consensusRate:
+          type: number
+          description: Percentage of chains with consensus
+        validationLatency:
+          type: object
+          properties:
+            p50:
+              type: number
+            p95:
+              type: number
+            p99:
+              type: number
+          description: Validation latency percentiles
+        chainsByDepth:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Chain count by depth
+        federationHealth:
+          type: object
+          properties:
+            activeServers:
+              type: integer
+            totalServers:
+              type: integer
+            networkConnectivity:
+              type: number
+            averageResponseTime:
+              type: number
+        recentActivity:
+          type: object
+          properties:
+            validationsPerHour:
+              type: number
+            newChainsPerHour:
+              type: number
+            consensusVotesPerHour:
+              type: number
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - error
+        - code
+
+  securitySchemes:
+    federationAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Federation server authentication
+
+    serverAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Server authentication for administrative operations
+
+security:
+  - federationAuth: []
+  - serverAuth: []

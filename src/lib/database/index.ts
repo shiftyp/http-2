@@ -93,8 +93,14 @@ export const DB_CONFIG: DBConfig = {
 };
 
 export class Database {
+  private config: DBConfig;
   private initialized = false;
   private messageCache = new Map<string, any[]>();
+  private certificateCache = new Map<string, any>();
+
+  constructor(config: DBConfig = DB_CONFIG) {
+    this.config = config;
+  }
 
   async init(): Promise<void> {
     if (this.initialized) return;
@@ -117,9 +123,19 @@ export class Database {
     const pageEntry: PageEntry = {
       path: page.path || page.id,
       title: page.title || 'Untitled',
-      content: page.content || '',
+      content: JSON.stringify({
+        id: page.id,
+        title: page.title,
+        components: page.components || [],
+        layout: page.layout,
+        metadata: page.metadata,
+        createdAt: page.createdAt,
+        updatedAt: page.updatedAt,
+        siteId: page.siteId,
+        slug: page.slug
+      }),
       lastUpdated: new Date().toISOString(),
-      author: page.author
+      author: page.author || page.siteId
     };
 
     await logbook.savePage(pageEntry);
@@ -134,12 +150,22 @@ export class Database {
     // Try to parse content as JSON, fallback to raw content
     try {
       const parsed = JSON.parse(page.content);
+      // If parsed successfully and has an id, it's a structured page with components
+      if (parsed.id) {
+        return {
+          ...parsed,
+          path: page.path,
+          lastModified: page.lastUpdated || parsed.updatedAt
+        };
+      }
+      // Otherwise return the parsed content with page metadata
       return {
         ...parsed,
         path: page.path,
         lastModified: page.lastUpdated
       };
     } catch {
+      // If not JSON, return the page as-is
       return {
         ...page,
         lastModified: page.lastUpdated
@@ -182,12 +208,14 @@ export class Database {
       });
   }
 
-  async getActiveMeshNodes(): Promise<MeshNode[]> {
+  async getActiveMeshNodes(maxAge?: number): Promise<MeshNode[]> {
     await this.ensureInitialized();
-    return await logbook.getActiveNodes(1); // Get nodes active in last hour
+    // Convert maxAge from milliseconds to hours
+    const hours = maxAge ? maxAge / (60 * 60 * 1000) : 1;
+    return await logbook.getActiveNodes(hours);
   }
 
-  async getMessages(options: { limit?: number } = {}): Promise<any[]> {
+  async getMessages(options: { limit?: number; from?: string; to?: string; unread?: boolean } = {}): Promise<any[]> {
     await this.ensureInitialized();
 
     // Get all message pages
@@ -203,6 +231,17 @@ export class Database {
       })
       .filter(msg => msg !== null);
 
+    // Apply filters
+    if (options.from) {
+      messages = messages.filter(msg => msg.from === options.from);
+    }
+    if (options.to) {
+      messages = messages.filter(msg => msg.to === options.to);
+    }
+    if (options.unread !== undefined) {
+      messages = messages.filter(msg => msg.unread === options.unread);
+    }
+
     // Sort by timestamp (newest first)
     messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -214,9 +253,18 @@ export class Database {
     return messages;
   }
 
-  async getQSOLog(options: { limit?: number } = {}): Promise<QSOEntry[]> {
+  async getQSOLog(options: { limit?: number; callsign?: string; frequency?: number } = {}): Promise<QSOEntry[]> {
     await this.ensureInitialized();
-    const qsos = await logbook.findQSOs();
+    let qsos = await logbook.findQSOs();
+
+    // Apply filters
+    if (options.callsign) {
+      qsos = qsos.filter(qso => qso.callsign === options.callsign);
+    }
+    if (options.frequency) {
+      qsos = qsos.filter(qso => qso.frequency === options.frequency);
+    }
+
     return qsos.slice(0, options.limit || 100);
   }
 
@@ -342,7 +390,7 @@ export class Database {
       power: qso.power
     };
 
-    await logbook.recordQSO(qsoEntry);
+    await logbook.logQSO(qsoEntry);
   }
 
   // Settings operations - store as pages with settings: prefix
@@ -412,6 +460,26 @@ export class Database {
 
   async getCertificate(callsign: string): Promise<any> {
     await this.ensureInitialized();
+
+    // Check cache first
+    if (this.certificateCache.has(callsign)) {
+      return this.certificateCache.get(callsign);
+    }
+
+    const cert = await logbook.getPage(`cert:${callsign}`);
+    if (!cert) return null;
+
+    try {
+      const parsed = JSON.parse(cert.content);
+      this.certificateCache.set(callsign, parsed);
+      return parsed;
+    } catch {
+      return cert;
+    }
+  }
+
+  async getCertificateFromStorage(callsign: string): Promise<any> {
+    await this.ensureInitialized();
     const cert = await logbook.getPage(`cert:${callsign}`);
     if (!cert) return null;
 
@@ -420,6 +488,117 @@ export class Database {
     } catch {
       return cert;
     }
+  }
+
+  async getValidCertificates(): Promise<any[]> {
+    await this.ensureInitialized();
+    const pages = await logbook.listPages();
+    const now = Date.now();
+
+    return pages
+      .filter(page => page.path.startsWith('cert:'))
+      .map(page => {
+        try {
+          return JSON.parse(page.content);
+        } catch {
+          return null;
+        }
+      })
+      .filter(cert => {
+        if (!cert) return false;
+        if (!cert.expiresAt) return true;
+        return new Date(cert.expiresAt).getTime() > now;
+      });
+  }
+
+  // Cache operations
+  async cacheContent(key: string, data: any, ttl?: number): Promise<void> {
+    await this.ensureInitialized();
+    const cacheEntry: PageEntry = {
+      path: `cache:${key}`,
+      title: `Cache: ${key}`,
+      content: JSON.stringify({
+        data,
+        cachedAt: Date.now(),
+        ttl: ttl || 3600000, // Default 1 hour
+        expiresAt: Date.now() + (ttl || 3600000)
+      }),
+      lastUpdated: new Date().toISOString(),
+      author: 'cache'
+    };
+    await logbook.savePage(cacheEntry);
+  }
+
+  async getCachedContent(key: string): Promise<any> {
+    await this.ensureInitialized();
+    const cached = await logbook.getPage(`cache:${key}`);
+    if (!cached) return null;
+
+    try {
+      const parsed = JSON.parse(cached.content);
+      // Check if expired
+      if (parsed.expiresAt && parsed.expiresAt < Date.now()) {
+        return null;
+      }
+      return parsed.data;
+    } catch {
+      return null;
+    }
+  }
+
+  async clearOldCache(maxAge: number = 3600000): Promise<void> {
+    await this.ensureInitialized();
+    const pages = await logbook.listPages();
+    const now = Date.now();
+
+    // In a real implementation, we'd delete expired cache entries
+    // For now, just log what would be deleted
+    const expired = pages
+      .filter(page => page.path.startsWith('cache:'))
+      .filter(page => {
+        try {
+          const parsed = JSON.parse(page.content);
+          return parsed.expiresAt && parsed.expiresAt < now;
+        } catch {
+          return false;
+        }
+      });
+
+    console.log(`Would delete ${expired.length} expired cache entries`);
+  }
+
+  // Message operations with filters
+  async getMessagesWithFilters(filters: { from?: string; to?: string; unread?: boolean } = {}): Promise<any[]> {
+    const messages = await this.getMessages();
+
+    return messages.filter(msg => {
+      if (filters.from && msg.from !== filters.from) return false;
+      if (filters.to && msg.to !== filters.to) return false;
+      if (filters.unread !== undefined && msg.unread !== filters.unread) return false;
+      return true;
+    });
+  }
+
+  async markMessageAsRead(messageId: number | string): Promise<void> {
+    // This is a placeholder - in reality would update the message
+    console.log(`Message ${messageId} marked as read`);
+  }
+
+  // QSO operations with filters
+  async logQSO(qso: QSOEntry): Promise<void> {
+    await this.ensureInitialized();
+    await logbook.logQSO(qso);
+  }
+
+  async getQSOLogWithFilters(filters: { callsign?: string; frequency?: number } = {}): Promise<QSOEntry[]> {
+    await this.ensureInitialized();
+    const qsos = await logbook.findQSOs();
+
+    return qsos.filter(qso => {
+      if (filters.callsign && qso.callsign !== filters.callsign) return false;
+      if (filters.frequency && qso.frequency !== filters.frequency) return false;
+      return true;
+    });
   }
 
   async getAllCertificates(): Promise<any[]> {

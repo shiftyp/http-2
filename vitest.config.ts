@@ -8,6 +8,14 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        isolate: true
+      }
+    },
+    maxConcurrency: 5,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

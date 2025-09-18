@@ -1,0 +1,24 @@
+{
+  "server": {
+    "port": 8080,
+    "bindAddress": "0.0.0.0",
+    "pwaAssetsPath": "./pwa-assets"
+  },
+  "certificates": {
+    "storePath": "./certificates",
+    "requireBootstrap": true
+  },
+  "emergency": {
+    "enabled": false,
+    "contact": {
+      "callsign": "YOUR_CALLSIGN",
+      "frequency": "144.390 MHz",
+      "notes": "Primary emergency frequency"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "console": true,
+    "filePath": "./logs/server.log"
+  }
+}

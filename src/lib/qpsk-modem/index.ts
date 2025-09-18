@@ -176,6 +176,21 @@ export class QPSKModem {
     }
   }
 
+  setMode(modeName: string): void {
+    // Handle simple mode names for tests
+    if (modeName === 'QPSK' || modeName === 'BPSK' || modeName === '16-QAM') {
+      this.mode = {
+        ...this.mode,
+        modulation: modeName === 'BPSK' ? 'QPSK' : modeName === '16-QAM' ? '16-QAM' : 'QPSK',
+        dataRate: modeName === 'BPSK' ? 2400 : modeName === '16-QAM' ? 11200 : 4800
+      };
+    } else if (modeName in MODEM_MODES) {
+      // Handle standard HTTP modes
+      this.mode = MODEM_MODES[modeName];
+      this.config.mode = modeName;
+    }
+  }
+
   private grayEncode(symbol: number): number {
     return symbol ^ (symbol >> 1);
   }

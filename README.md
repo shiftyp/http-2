@@ -23,7 +23,6 @@ HTTP Over Ham Radio transforms amateur radio into a digital communication networ
 ## 🚦 Quick Start
 
 ### Prerequisites
-
 - Modern web browser (Chrome, Edge, Firefox, Safari)
 - Amateur radio license (for transmission)
 - Compatible radio with CAT control (optional)

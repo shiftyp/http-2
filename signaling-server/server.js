@@ -10,6 +10,8 @@
 const WebSocket = require('ws');
 const http = require('http');
 const crypto = require('crypto');
+const express = require('express');
+const { createApp } = require('./src/app');
 
 const PORT = process.env.PORT || 8080;
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -98,27 +100,30 @@ class SignalingServer {
     this.stations = new Map(); // websocket -> Station
     this.networks = new Map(); // network name -> Network
     this.callsignToStation = new Map(); // callsign -> Station
+    this.app = null;
   }
 
-  start() {
-    // Create HTTP server for health checks
-    const server = http.createServer((req, res) => {
-      if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'ok',
-          networks: this.networks.size,
-          stations: this.stations.size,
-          uptime: process.uptime()
-        }));
-      } else if (req.url === '/stats') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(this.getStats()));
-      } else {
-        res.writeHead(404);
-        res.end('Not Found');
-      }
+  async start() {
+    // Create Express app with all features
+    this.app = await createApp(process.env.DB_PATH || './data/signaling.db');
+
+    // Add health and stats endpoints
+    this.app.get('/health', (req, res) => {
+      res.json({
+        status: 'ok',
+        networks: this.networks.size,
+        stations: this.stations.size,
+        uptime: process.uptime(),
+        emergencyMode: process.argv.includes('--emergency')
+      });
     });
+
+    this.app.get('/stats', (req, res) => {
+      res.json(this.getStats());
+    });
+
+    // Create HTTP server from Express app
+    const server = http.createServer(this.app);
 
     // Create WebSocket server
     const wss = new WebSocket.Server({ server });
@@ -481,7 +486,10 @@ if (require.main === module) {
     process.exit(0);
   });
 
-  server.start();
+  server.start().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = { SignalingServer, Station, Network };

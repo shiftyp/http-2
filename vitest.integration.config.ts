@@ -8,6 +8,14 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/integration/setup.ts'],
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        isolate: true
+      }
+    },
+    maxConcurrency: 3,
     include: [
       'src/test/integration/**/*.{test,spec}.{js,ts,tsx}'
     ],

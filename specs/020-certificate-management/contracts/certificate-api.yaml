@@ -1,0 +1,471 @@
+openapi: 3.0.3
+info:
+  title: Certificate Management API (Client)
+  description: API for client certificate operations in amateur radio HTTP communication
+  version: 1.0.0
+  contact:
+    name: Amateur Radio HTTP Project
+
+servers:
+  - url: https://localhost:3000/api
+    description: Local development server
+
+paths:
+  /certificates:
+    get:
+      summary: List client certificates
+      description: Retrieve all certificates stored locally for the current station
+      operationId: listCertificates
+      parameters:
+        - name: type
+          in: query
+          description: Filter by certificate type
+          schema:
+            type: string
+            enum: [self-signed, arrl, lotw]
+        - name: callsign
+          in: query
+          description: Filter by callsign
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,7}$'
+      responses:
+        '200':
+          description: List of certificates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Certificate'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create or import certificate
+      description: Create a new self-signed certificate or import an existing one
+      operationId: createCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateCreate'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                p12File:
+                  type: string
+                  format: binary
+                  description: PKCS#12 file for LoTW certificates
+                password:
+                  type: string
+                  description: Password for PKCS#12 file
+                callsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+      responses:
+        '201':
+          description: Certificate created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400':
+          description: Invalid certificate data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Certificate already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/{certificateId}:
+    get:
+      summary: Get certificate details
+      description: Retrieve detailed information about a specific certificate
+      operationId: getCertificate
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update certificate
+      description: Update certificate metadata or approval status
+      operationId: updateCertificate
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificateUpdate'
+      responses:
+        '200':
+          description: Certificate updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete certificate
+      description: Remove certificate from local storage
+      operationId: deleteCertificate
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Certificate deleted successfully
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/{certificateId}/export:
+    get:
+      summary: Export certificate
+      description: Export certificate in specified format
+      operationId: exportCertificate
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          description: Export format
+          schema:
+            type: string
+            enum: [pem, der, p12]
+            default: pem
+        - name: includePrivateKey
+          in: query
+          description: Include private key in export
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Certificate exported successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/{certificateId}/sign:
+    post:
+      summary: Sign data with certificate
+      description: Sign arbitrary data using the certificate's private key
+      operationId: signData
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: string
+                  description: Data to sign (base64 encoded)
+                algorithm:
+                  type: string
+                  enum: [ECDSA-SHA256]
+                  default: ECDSA-SHA256
+              required: [data]
+      responses:
+        '200':
+          description: Data signed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signature:
+                    type: string
+                    description: Digital signature (base64 encoded)
+                  algorithm:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /certificates/verify:
+    post:
+      summary: Verify certificate signature
+      description: Verify a digital signature against a certificate
+      operationId: verifyCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: string
+                  description: Original data (base64 encoded)
+                signature:
+                  type: string
+                  description: Digital signature (base64 encoded)
+                certificateId:
+                  type: string
+                  description: Certificate ID to verify against
+                publicKeyPem:
+                  type: string
+                  description: Public key PEM (alternative to certificateId)
+              required: [data, signature]
+      responses:
+        '200':
+          description: Signature verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  certificateInfo:
+                    $ref: '#/components/schemas/CertificateInfo'
+        '400':
+          description: Invalid verification request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Certificate:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique certificate identifier
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Amateur radio callsign
+        type:
+          type: string
+          enum: [self-signed, arrl, lotw]
+          description: Certificate type
+        publicKeyPem:
+          type: string
+          description: PEM-encoded public key
+        licenseClass:
+          type: string
+          enum: [extra, advanced, general, technician, novice]
+          description: Amateur radio license class
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+          description: Maidenhead grid locator
+        issuer:
+          type: string
+          description: Certificate issuer DN
+        subject:
+          type: string
+          description: Certificate subject DN
+        serialNumber:
+          type: string
+          description: Certificate serial number
+        validFrom:
+          type: string
+          format: date-time
+          description: Certificate validity start
+        validTo:
+          type: string
+          format: date-time
+          description: Certificate validity end
+        isRevoked:
+          type: boolean
+          description: Revocation status
+        trustLevel:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Trust level (0=unknown, 1=self-signed, 2=arrl, 3=lotw)
+        approvedServers:
+          type: array
+          items:
+            type: string
+          description: List of server callsigns that approved this certificate
+        createdAt:
+          type: string
+          format: date-time
+          description: Certificate creation timestamp
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: Last usage timestamp
+      required:
+        - id
+        - callsign
+        - type
+        - publicKeyPem
+        - licenseClass
+        - validFrom
+        - validTo
+        - trustLevel
+        - createdAt
+
+    CertificateCreate:
+      type: object
+      properties:
+        callsign:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+          description: Amateur radio callsign
+        licenseClass:
+          type: string
+          enum: [extra, advanced, general, technician, novice]
+          description: Amateur radio license class
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+          description: Maidenhead grid locator
+        type:
+          type: string
+          enum: [self-signed]
+          description: Certificate type for creation (import uses multipart)
+        validityPeriod:
+          type: integer
+          minimum: 1
+          maximum: 3650
+          default: 365
+          description: Validity period in days
+      required:
+        - callsign
+        - licenseClass
+        - type
+
+    CertificateUpdate:
+      type: object
+      properties:
+        gridSquare:
+          type: string
+          pattern: '^[A-R]{2}[0-9]{2}([a-x]{2})?$'
+          description: Updated grid square
+        approvedServers:
+          type: array
+          items:
+            type: string
+          description: Updated list of approved servers
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: Updated last usage timestamp
+
+    CertificateInfo:
+      type: object
+      properties:
+        callsign:
+          type: string
+        type:
+          type: string
+        licenseClass:
+          type: string
+        trustLevel:
+          type: integer
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+        isExpired:
+          type: boolean
+        isRevoked:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - error
+        - code
+
+  securitySchemes:
+    certificateAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Certificate-based authentication using signed JWT
+
+security:
+  - certificateAuth: []
