@@ -1,0 +1,379 @@
+openapi: 3.0.3
+info:
+  title: Fail-Safe Shutdown API
+  description: Emergency shutdown and equipment monitoring interface
+  version: 1.0.0
+
+paths:
+  /fail-safe/emergency-shutdown:
+    post:
+      summary: Trigger immediate emergency shutdown
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shutdownReason
+                - operatorSignature
+                - timestamp
+              properties:
+                shutdownReason:
+                  type: string
+                  enum: [equipment_fault, regulatory_violation, operator_command, power_failure, security_breach]
+                emergencyOverride:
+                  type: boolean
+                  description: Override normal shutdown delays for true emergencies
+                operatorSignature:
+                  type: string
+                timestamp:
+                  type: integer
+                additionalInfo:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Emergency shutdown initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shutdownId:
+                    type: string
+                  estimatedCompletion:
+                    type: integer
+                    description: Estimated seconds until shutdown complete
+                  shutdownSteps:
+                    type: array
+                    items:
+                      type: string
+        '503':
+          description: Shutdown already in progress
+
+  /fail-safe/hardware-watchdog:
+    get:
+      summary: Get hardware watchdog status
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Hardware watchdog information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  watchdogConnected:
+                    type: boolean
+                  lastHeartbeat:
+                    type: integer
+                  heartbeatInterval:
+                    type: integer
+                  timeoutThreshold:
+                    type: integer
+                  failSafeState:
+                    type: string
+                    enum: [armed, monitoring, triggered, fault]
+                  hardwareVersion:
+                    type: string
+                  serialPort:
+                    type: string
+
+    post:
+      summary: Send heartbeat to hardware watchdog
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - timestamp
+                - systemHealth
+              properties:
+                timestamp:
+                  type: integer
+                systemHealth:
+                  type: string
+                  enum: [healthy, degraded, critical]
+                operatorPresent:
+                  type: boolean
+                transmissionActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Heartbeat acknowledged by hardware
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acknowledged:
+                    type: boolean
+                  nextHeartbeatDue:
+                    type: integer
+        '503':
+          description: Hardware watchdog not responding
+
+  /fail-safe/equipment-monitor:
+    get:
+      summary: Get current equipment monitoring status
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Equipment monitoring data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  monitoringEnabled:
+                    type: boolean
+                  lastUpdate:
+                    type: integer
+                  parameters:
+                    type: object
+                    properties:
+                      rfPower:
+                        type: object
+                        properties:
+                          current:
+                            type: number
+                          threshold:
+                            type: number
+                          status:
+                            type: string
+                            enum: [normal, warning, critical]
+                      swr:
+                        type: object
+                        properties:
+                          current:
+                            type: number
+                          threshold:
+                            type: number
+                          status:
+                            type: string
+                      frequency:
+                        type: object
+                        properties:
+                          current:
+                            type: number
+                          authorized:
+                            type: array
+                            items:
+                              type: object
+                          status:
+                            type: string
+                      temperature:
+                        type: object
+                        properties:
+                          current:
+                            type: number
+                          threshold:
+                            type: number
+                          status:
+                            type: string
+                  faultConditions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        parameter:
+                          type: string
+                        severity:
+                          type: string
+                          enum: [warning, critical]
+                        detected:
+                          type: integer
+                        description:
+                          type: string
+
+    put:
+      summary: Configure equipment monitoring parameters
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                monitoringEnabled:
+                  type: boolean
+                updateInterval:
+                  type: integer
+                  minimum: 1
+                  maximum: 60
+                thresholds:
+                  type: object
+                  properties:
+                    rfPowerMax:
+                      type: number
+                    swrMax:
+                      type: number
+                    temperatureMax:
+                      type: number
+                    frequencyTolerance:
+                      type: number
+                alertSettings:
+                  type: object
+                  properties:
+                    warningEnabled:
+                      type: boolean
+                    criticalEnabled:
+                      type: boolean
+                    shutdownOnCritical:
+                      type: boolean
+      responses:
+        '200':
+          description: Monitoring configuration updated
+
+  /fail-safe/emergency-override:
+    get:
+      summary: Get emergency communication override status
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Emergency override information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overrideActive:
+                    type: boolean
+                  emergencyCallsign:
+                    type: string
+                  overrideReason:
+                    type: string
+                  activatedAt:
+                    type: integer
+                  maxDuration:
+                    type: integer
+                  timeRemaining:
+                    type: integer
+                  overrideType:
+                    type: string
+                    enum: [health_welfare, emergency_traffic, public_service]
+
+    post:
+      summary: Activate emergency communication override
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - emergencyCallsign
+                - overrideReason
+                - overrideType
+                - operatorSignature
+              properties:
+                emergencyCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                overrideReason:
+                  type: string
+                  maxLength: 500
+                overrideType:
+                  type: string
+                  enum: [health_welfare, emergency_traffic, public_service]
+                maxDuration:
+                  type: integer
+                  minimum: 300
+                  maximum: 3600
+                  description: Maximum override duration in seconds
+                operatorSignature:
+                  type: string
+      responses:
+        '201':
+          description: Emergency override activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overrideId:
+                    type: string
+                  activatedAt:
+                    type: integer
+                  expiresAt:
+                    type: integer
+        '409':
+          description: Override already active
+
+    delete:
+      summary: Deactivate emergency override
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operatorSignature
+                - reason
+              properties:
+                operatorSignature:
+                  type: string
+                reason:
+                  type: string
+                  description: Reason for deactivating override
+      responses:
+        '200':
+          description: Emergency override deactivated
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ShutdownEvent:
+      type: object
+      properties:
+        eventId:
+          type: string
+        timestamp:
+          type: integer
+        shutdownCause:
+          type: string
+        initiatingOperator:
+          type: string
+        systemState:
+          type: object
+        emergencyOverride:
+          type: boolean
+        completionTime:
+          type: integer
+
+    EquipmentParameter:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+        threshold:
+          type: number
+        status:
+          type: string
+          enum: [normal, warning, critical]
+        lastUpdate:
+          type: integer

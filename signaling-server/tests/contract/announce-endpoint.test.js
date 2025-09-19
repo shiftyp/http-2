@@ -90,7 +90,7 @@ describe('POST /api/content/announce', () => {
     const beacon = {
       callsign: 'KE5MNO',
       signature: 'sig',
-      contentHash: 'test123test123test123test123test123test123test123test123test12345',
+      contentHash: 'a'.repeat(64), // Valid 64-character hash
       path: ['KF6PQR'],
       timestamp: new Date().toISOString()
     };
@@ -99,14 +99,14 @@ describe('POST /api/content/announce', () => {
     for (let i = 0; i < 10; i++) {
       await request(app)
         .post('/api/content/announce')
-        .send({ ...beacon, contentHash: beacon.contentHash + i })
+        .send({ ...beacon, contentHash: ('b'.repeat(63) + i).padStart(64, '0') })
         .expect(201);
     }
 
     // 11th request should be rate limited
     await request(app)
       .post('/api/content/announce')
-      .send({ ...beacon, contentHash: beacon.contentHash + '11' })
+      .send({ ...beacon, contentHash: 'c'.repeat(64) })
       .expect(429);
   });
 

@@ -75,15 +75,73 @@ export class AODVRouter {
   private sequenceNumber: number = 0;
   private messageCache: Map<string, number> = new Map(); // MessageID -> timestamp
   private pendingRequests: Map<string, RouteRequest[]> = new Map();
+  private activeDiscoveries: Map<string, { timeout: NodeJS.Timeout, interval: NodeJS.Timeout }> = new Map();
+  private cleanupInterval: NodeJS.Timeout | null = null;
   private myCallsign: string;
   private myAddress: string;
+  private readonly MAX_CACHE_SIZE = 1000;
+  private readonly MAX_ROUTING_TABLE_SIZE = 500;
+  private readonly CACHE_TTL = 300000; // 5 minutes
 
   constructor(callsign: string) {
     this.myCallsign = callsign;
     this.myAddress = this.generateMeshAddress(callsign);
 
-    // Periodic route table maintenance
-    setInterval(() => this.maintainRoutes(), 30000);
+    // Periodic route table maintenance with cleanup tracking
+    this.cleanupInterval = setInterval(() => this.maintainRoutes(), 30000);
+  }
+
+  // Cleanup method to prevent memory leaks
+  cleanup(): void {
+    // Clear all active route discoveries
+    for (const [destination, { timeout, interval }] of this.activeDiscoveries) {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    }
+    this.activeDiscoveries.clear();
+
+    // Clear cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    // Clear caches to prevent memory leaks
+    this.messageCache.clear();
+    this.pendingRequests.clear();
+    this.routingTable.clear();
+  }
+
+  // Clean up old entries from message cache
+  private cleanupMessageCache(): void {
+    const now = Date.now();
+    const toDelete: string[] = [];
+
+    for (const [messageId, timestamp] of this.messageCache) {
+      if (now - timestamp > this.CACHE_TTL) {
+        toDelete.push(messageId);
+      }
+    }
+
+    toDelete.forEach(messageId => this.messageCache.delete(messageId));
+
+    // Enforce cache size limit
+    if (this.messageCache.size > this.MAX_CACHE_SIZE) {
+      const entries = Array.from(this.messageCache.entries());
+      entries.sort((a, b) => a[1] - b[1]); // Sort by timestamp
+      const toRemove = entries.slice(0, this.messageCache.size - this.MAX_CACHE_SIZE);
+      toRemove.forEach(([messageId]) => this.messageCache.delete(messageId));
+    }
+  }
+
+  // Clean up routing table to prevent unbounded growth
+  private cleanupRoutingTable(): void {
+    if (this.routingTable.size > this.MAX_ROUTING_TABLE_SIZE) {
+      const entries = Array.from(this.routingTable.entries());
+      entries.sort((a, b) => a[1].lastUpdated - b[1].lastUpdated); // Sort by age
+      const toRemove = entries.slice(0, this.routingTable.size - this.MAX_ROUTING_TABLE_SIZE);
+      toRemove.forEach(([dest]) => this.routingTable.delete(dest));
+    }
   }
 
   getAddress(): string {
@@ -160,26 +218,44 @@ export class AODVRouter {
       timestamp: Date.now()
     };
 
-    // Cache the request to prevent loops
+    // Cache the request to prevent loops (with cleanup)
     this.messageCache.set(rreq.messageId, Date.now());
+    this.cleanupMessageCache();
 
     // Broadcast RREQ
     await this.broadcastRouteRequest(rreq);
 
-    // Wait for RREP
+    // Wait for RREP with proper cleanup
     return new Promise((resolve) => {
+      let isResolved = false;
+
       const timeout = setTimeout(() => {
-        resolve(null);
+        if (!isResolved) {
+          isResolved = true;
+          resolve(null);
+        }
       }, 10000); // 10 second timeout
 
       const checkInterval = setInterval(() => {
+        if (isResolved) {
+          clearInterval(checkInterval);
+          return;
+        }
+
         const route = this.routingTable.get(destination);
         if (route) {
+          isResolved = true;
           clearInterval(checkInterval);
           clearTimeout(timeout);
           resolve(route);
         }
       }, 100);
+
+      // Store references for cleanup
+      if (!this.activeDiscoveries) {
+        this.activeDiscoveries = new Map();
+      }
+      this.activeDiscoveries.set(destination, { timeout, interval: checkInterval });
     });
   }
 
@@ -224,14 +300,19 @@ export class AODVRouter {
         
         this.sendRouteReply(rrep, sender);
       } else {
-        // Forward RREQ
+        // Forward RREQ with broadcast storm prevention
         const forwardedRreq = {
           ...rreq,
           hopCount: rreq.hopCount + 1
         };
-        
-        if (forwardedRreq.hopCount < 10) { // Max 10 hops
-          this.broadcastRouteRequest(forwardedRreq);
+
+        // Prevent broadcast storms with stricter limits and delay
+        if (forwardedRreq.hopCount < 7) { // Reduced max hops
+          // Add random delay to prevent synchronized broadcasts
+          const delay = Math.random() * 100 + 50; // 50-150ms delay
+          setTimeout(() => {
+            this.broadcastRouteRequest(forwardedRreq);
+          }, delay);
         }
       }
     }
@@ -317,22 +398,21 @@ export class AODVRouter {
         this.routingTable.delete(dest);
       }
 
-      // Send RERR for stale routes
-      const rerr: RouteError = {
-        type: 'RERR',
-        unreachableDestinations: staleRoutes,
-        source: this.myAddress
-      };
-      
-      this.broadcastRouteError(rerr);
-    }
+      // Send RERR for stale routes (only if we have valid neighbors)
+      if (this.routingTable.size > 0) {
+        const rerr: RouteError = {
+          type: 'RERR',
+          unreachableDestinations: staleRoutes,
+          source: this.myAddress
+        };
 
-    // Clean up old message cache
-    for (const [id, timestamp] of this.messageCache) {
-      if (now - timestamp > 60000) { // 1 minute
-        this.messageCache.delete(id);
+        this.broadcastRouteError(rerr);
       }
     }
+
+    // Clean up caches using dedicated methods
+    this.cleanupMessageCache();
+    this.cleanupRoutingTable();
   }
 
   private generateMessageId(): string {
@@ -340,8 +420,25 @@ export class AODVRouter {
   }
 
   private async broadcastRouteRequest(rreq: RouteRequest): Promise<void> {
+    // Prevent duplicate broadcasts of the same request
+    if (this.messageCache.has(rreq.messageId)) {
+      return; // Already processed this request
+    }
+
+    // Rate limiting: prevent too many broadcasts in short time
+    const recentBroadcasts = Array.from(this.messageCache.values())
+      .filter(timestamp => Date.now() - timestamp < 1000); // 1 second window
+
+    if (recentBroadcasts.length > 5) {
+      console.log('Rate limiting: too many recent broadcasts');
+      return;
+    }
+
     // Implementation would broadcast via radio
     console.log('Broadcasting RREQ:', rreq);
+
+    // Cache this broadcast to prevent loops
+    this.messageCache.set(rreq.messageId, Date.now());
   }
 
   private async sendRouteReply(rrep: RouteReply, nextHop: string): Promise<void> {

@@ -1,6 +1,5 @@
 import { QPSKModem } from '../qpsk-modem';
 import { HamRadioCompressor } from '../compression';
-import { protocolBuffers } from '../protocol-buffers';
 
 export interface HTTPRequest {
   method: string;

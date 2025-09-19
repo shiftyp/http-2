@@ -40,15 +40,26 @@ describe('Bootstrap API - POST /api/certificates/bootstrap', () => {
       });
     }
 
-    // Also remove the database file to ensure clean state
-    const dbPath = path.join(process.cwd(), 'data', 'certificates.db');
-    if (fs.existsSync(dbPath)) {
-      fs.unlinkSync(dbPath);
+    // Use a unique database path for this test run
+    const testDbPath = path.join(process.cwd(), 'data', `test-cert-${Date.now()}.db`);
+
+    // Clean up any old test databases
+    const dataDir = path.join(process.cwd(), 'data');
+    if (fs.existsSync(dataDir)) {
+      fs.readdirSync(dataDir).forEach(file => {
+        if (file.startsWith('test-cert-') || file === 'certificates.db') {
+          fs.unlinkSync(path.join(dataDir, file));
+        }
+      });
     }
 
-    // Restart server with clean state
+    // Restart server with unique DB path
     serverProcess = spawn('node', [path.join(process.cwd(), 'server.js')], {
-      env: { ...process.env, PORT: serverPort },
+      env: {
+        ...process.env,
+        PORT: serverPort,
+        CERT_DB_PATH: testDbPath
+      },
       cwd: process.cwd()
     });
 
@@ -117,7 +128,7 @@ MIIBkTCB+wIJAKHHIG...second...XYZ
       .expect(403); // Forbidden
 
     expect(response.body).toHaveProperty('error');
-    expect(response.body.error).toContain('already initialized');
+    expect(response.body.error).toContain('already bootstrapped');
   });
 
   it('should validate certificate format', async () => {

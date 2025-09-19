@@ -1,0 +1,405 @@
+openapi: 3.0.0
+info:
+  title: Rich Media Components API
+  version: 1.0.0
+  description: API for managing rich media components in ham radio page builder
+
+paths:
+  /api/media/upload:
+    post:
+      summary: Upload and compress media file
+      description: Upload a media file and compress it according to specified profile
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - type
+                - profile
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Media file to upload
+                type:
+                  type: string
+                  enum: [IMAGE, AUDIO, VIDEO, DOCUMENT]
+                profile:
+                  type: string
+                  enum: [emergency, standard, quality]
+                  default: standard
+                priority:
+                  type: string
+                  enum: [emergency, high, normal, low]
+                  default: normal
+                fallbackText:
+                  type: string
+                  description: Text to display if media fails
+      responses:
+        200:
+          description: Media uploaded and compressed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaUploadResponse'
+        400:
+          description: Invalid file or parameters
+        413:
+          description: File too large (>100KB after compression)
+
+  /api/media/{mediaId}:
+    get:
+      summary: Get media component by ID
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Media component details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaComponent'
+        404:
+          description: Media not found
+
+    delete:
+      summary: Delete media component
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Media deleted successfully
+        404:
+          description: Media not found
+
+  /api/media/{mediaId}/compress:
+    post:
+      summary: Recompress media with different settings
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - profile
+              properties:
+                profile:
+                  type: string
+                  enum: [emergency, standard, quality]
+                targetSize:
+                  type: integer
+                  maximum: 102400
+                  description: Target size in bytes
+      responses:
+        200:
+          description: Media recompressed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompressionResult'
+
+  /api/media/{mediaId}/preview:
+    get:
+      summary: Get progressive preview levels
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: quality
+          in: query
+          schema:
+            type: integer
+            minimum: 5
+            maximum: 100
+            default: 20
+      responses:
+        200:
+          description: Preview blob at specified quality
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/media/gallery:
+    get:
+      summary: Get media gallery
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [IMAGE, AUDIO, VIDEO, DOCUMENT]
+        - name: pinned
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        200:
+          description: Gallery items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GalleryItem'
+                  total:
+                    type: integer
+                  totalSize:
+                    type: integer
+
+  /api/media/cache/clear:
+    post:
+      summary: Clear media cache
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keepPinned:
+                  type: boolean
+                  default: true
+                olderThan:
+                  type: string
+                  format: date-time
+      responses:
+        200:
+          description: Cache cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cleared:
+                    type: integer
+                  freedSpace:
+                    type: integer
+
+components:
+  schemas:
+    MediaComponent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [IMAGE, AUDIO, VIDEO, DOCUMENT]
+        grid:
+          $ref: '#/components/schemas/GridPosition'
+        source:
+          $ref: '#/components/schemas/MediaSource'
+        transmission:
+          $ref: '#/components/schemas/TransmissionState'
+        display:
+          $ref: '#/components/schemas/DisplayProperties'
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+        operator:
+          type: string
+          pattern: '^[A-Z0-9]{3,7}$'
+
+    GridPosition:
+      type: object
+      properties:
+        x:
+          type: integer
+          minimum: 0
+          maximum: 11
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+          maximum: 12
+        height:
+          type: integer
+          minimum: 1
+
+    MediaSource:
+      type: object
+      properties:
+        original:
+          type: object
+          properties:
+            size:
+              type: integer
+            format:
+              type: string
+            dimensions:
+              type: object
+              properties:
+                width:
+                  type: integer
+                height:
+                  type: integer
+            duration:
+              type: number
+            pages:
+              type: integer
+        compressed:
+          type: object
+          properties:
+            size:
+              type: integer
+              maximum: 102400
+            format:
+              type: string
+            compressionRatio:
+              type: number
+            profile:
+              type: string
+              enum: [emergency, standard, quality]
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaChunk'
+        checksum:
+          type: string
+        signature:
+          type: string
+
+    MediaChunk:
+      type: object
+      properties:
+        index:
+          type: integer
+        total:
+          type: integer
+        size:
+          type: integer
+        hash:
+          type: string
+
+    TransmissionState:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, queued, transmitting, complete, failed, cancelled]
+        priority:
+          type: string
+          enum: [emergency, high, normal, low]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        chunksTransmitted:
+          type: integer
+        totalChunks:
+          type: integer
+        estimatedTimeRemaining:
+          type: integer
+        assignedSubcarriers:
+          type: integer
+          maximum: 48
+
+    DisplayProperties:
+      type: object
+      properties:
+        fallbackText:
+          type: string
+        altText:
+          type: string
+        caption:
+          type: string
+        autoplay:
+          type: boolean
+        loop:
+          type: boolean
+        controls:
+          type: boolean
+        muted:
+          type: boolean
+
+    MediaUploadResponse:
+      type: object
+      properties:
+        mediaId:
+          type: string
+        originalSize:
+          type: integer
+        compressedSize:
+          type: integer
+        compressionRatio:
+          type: number
+        chunks:
+          type: integer
+        checksum:
+          type: string
+
+    CompressionResult:
+      type: object
+      properties:
+        originalSize:
+          type: integer
+        newSize:
+          type: integer
+        profile:
+          type: string
+        compressionRatio:
+          type: number
+        format:
+          type: string
+
+    GalleryItem:
+      type: object
+      properties:
+        mediaId:
+          type: string
+        type:
+          type: string
+        size:
+          type: integer
+        lastAccessed:
+          type: string
+          format: date-time
+        accessCount:
+          type: integer
+        pinned:
+          type: boolean
+        pageId:
+          type: string
+        receivedFrom:
+          type: string
+        transmittedTo:
+          type: array
+          items:
+            type: string

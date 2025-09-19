@@ -43,10 +43,17 @@ describe('Bootstrap API - POST /api/certificates/initialize', () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    // Clear database between tests to ensure isolation
-    const dbPath = path.join(process.cwd(), 'data', 'certificates.db');
-    if (fs.existsSync(dbPath)) {
-      fs.unlinkSync(dbPath);
+    // Use a unique database path for this test run
+    const testDbPath = path.join(process.cwd(), 'data', `test-init-${Date.now()}.db`);
+
+    // Clean up any old test databases
+    const dataDir = path.join(process.cwd(), 'data');
+    if (fs.existsSync(dataDir)) {
+      fs.readdirSync(dataDir).forEach(file => {
+        if (file.startsWith('test-init-') || file === 'certificates.db') {
+          fs.unlinkSync(path.join(dataDir, file));
+        }
+      });
     }
 
     // Clear certificates
@@ -56,9 +63,13 @@ describe('Bootstrap API - POST /api/certificates/initialize', () => {
       });
     }
 
-    // Restart server with clean state
+    // Restart server with unique DB path
     serverProcess = spawn('node', [path.join(process.cwd(), 'server.js')], {
-      env: { ...process.env, PORT: serverPort },
+      env: {
+        ...process.env,
+        PORT: serverPort,
+        CERT_DB_PATH: testDbPath
+      },
       cwd: process.cwd()
     });
 
@@ -222,7 +233,7 @@ MIIBkTCB+wIJAKHHIG...chain...XYZ
         certificatePem: `-----BEGIN CERTIFICATE-----
 MIIBkTCB+wIJAKHHIG...emergency...XYZ
 -----END CERTIFICATE-----`,
-        callsign: 'EMRG1',
+        callsign: 'EM1RGY',
         description: 'Emergency operations root',
         emergencyUse: true
       },
@@ -236,6 +247,6 @@ MIIBkTCB+wIJAKHHIG...emergency...XYZ
 
     expect(response.body).toHaveProperty('emergencyMode', true);
     expect(response.body).toHaveProperty('message');
-    expect(response.body.message).toContain('emergency');
+    expect(response.body.message.toLowerCase()).toContain('emergency');
   });
 });

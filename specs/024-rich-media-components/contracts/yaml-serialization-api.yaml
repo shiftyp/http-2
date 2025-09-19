@@ -1,0 +1,268 @@
+openapi: 3.0.0
+info:
+  title: YAML Component Serialization API
+  version: 1.0.0
+  description: API for serializing page components to YAML for radio transmission
+
+paths:
+  /api/components/serialize:
+    post:
+      summary: Serialize components to YAML
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - components
+              properties:
+                pageId:
+                  type: string
+                title:
+                  type: string
+                components:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Component'
+                metadata:
+                  type: object
+                  properties:
+                    priority:
+                      type: string
+                      enum: [emergency, high, normal]
+                    ttl:
+                      type: integer
+                    created:
+                      type: string
+                      format: date-time
+                options:
+                  type: object
+                  properties:
+                    compact:
+                      type: boolean
+                      default: true
+                      description: Use flow style for arrays
+                    includeComments:
+                      type: boolean
+                      default: false
+                    lineWidth:
+                      type: integer
+                      default: 80
+      responses:
+        200:
+          description: YAML serialization successful
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  page:
+                    id: emrg_2024_001
+                    title: Emergency Update
+                    components:
+                      - type: IMAGE
+                        id: img_001
+                        grid: {x: 2, y: 3, w: 4, h: 3}
+                        props:
+                          src: emergency_map.jpg
+                          alt: Evacuation routes
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializationResult'
+
+  /api/components/deserialize:
+    post:
+      summary: Deserialize YAML to components
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: YAML string to deserialize
+      responses:
+        200:
+          description: Successfully deserialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pageId:
+                    type: string
+                  title:
+                    type: string
+                  components:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Component'
+                  metadata:
+                    type: object
+        400:
+          description: Invalid YAML format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/components/validate:
+    post:
+      summary: Validate YAML component structure
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        200:
+          description: YAML is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  size:
+                    type: integer
+                    description: Size in bytes
+                  componentCount:
+                    type: integer
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        400:
+          description: YAML validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/components/preview:
+    post:
+      summary: Preview YAML output with size estimates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - components
+              properties:
+                components:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Component'
+      responses:
+        200:
+          description: Preview generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  yaml:
+                    type: string
+                  size:
+                    type: integer
+                    description: Size in bytes
+                  compressedSize:
+                    type: integer
+                    description: Estimated compressed size
+                  transmissionTime:
+                    type: integer
+                    description: Estimated seconds at current data rate
+                  optimization:
+                    type: object
+                    properties:
+                      original:
+                        type: integer
+                      optimized:
+                        type: integer
+                      savings:
+                        type: number
+                        description: Percentage saved
+
+  /api/components/schema:
+    get:
+      summary: Get YAML schema for components
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [IMAGE, AUDIO, VIDEO, DOCUMENT, TEXT, HEADING, BUTTON, FORM]
+      responses:
+        200:
+          description: Component schema
+          content:
+            application/json:
+              schema:
+                type: object
+                description: JSON Schema for component YAML structure
+
+components:
+  schemas:
+    Component:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum: [IMAGE, AUDIO, VIDEO, DOCUMENT, TEXT, HEADING, PARAGRAPH, BUTTON, LINK, FORM, INPUT, TABLE, LIST, CONTAINER, DIVIDER]
+        id:
+          type: string
+        grid:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+            w:
+              type: integer
+            h:
+              type: integer
+        props:
+          type: object
+          description: Component-specific properties
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Component'
+
+    SerializationResult:
+      type: object
+      properties:
+        yaml:
+          type: string
+        size:
+          type: integer
+          description: Size in bytes
+        hash:
+          type: string
+          description: SHA-256 hash of YAML content
+        encoding:
+          type: string
+          default: UTF-8
+        lineCount:
+          type: integer
+        componentCount:
+          type: integer
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        path:
+          type: string
+          description: Path to error in YAML structure
+        suggestion:
+          type: string

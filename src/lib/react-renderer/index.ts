@@ -9,7 +9,6 @@ import React from 'react';
 import { renderToString, renderToStaticMarkup } from 'react-dom/server';
 import { hydrateRoot, createRoot } from 'react-dom/client';
 import { HamRadioCompressor } from '../compression';
-import { protocolBuffers } from '../protocol-buffers';
 
 /**
  * Pure binary field encoder (no protobuf/JSON overhead)
@@ -591,14 +590,18 @@ export class ReactHydrator {
     }
 
     try {
-      // Decode component props/state from protobuf
-      const encodedMessage = {
-        schemaId: compressedData.componentSchema,
-        data: compressedData.protobufData,
-        compressed: false
-      };
+      // Decode component props/state from compressed JSON data
+      let decodedData;
 
-      const decodedData = protocolBuffers.decode(encodedMessage);
+      if (compressedData.protobufData) {
+        // If we have binary data, assume it's compressed JSON
+        const compressor = new HamRadioCompressor();
+        const jsonString = await compressor.decompress(compressedData.protobufData);
+        decodedData = JSON.parse(jsonString);
+      } else {
+        // Fallback to direct JSON parsing
+        decodedData = compressedData;
+      }
 
       // Extract props and state from decoded data
       const { __state, ...props } = decodedData;

@@ -13,11 +13,11 @@ describe('POST /api/content/batch', () => {
     const { createApp } = await import('../../src/app.js');
     app = await createApp();
 
-    // Seed test data
+    // Seed test data - use valid 64-char hex hashes
     const testBeacons = [
-      { contentHash: 'batch001batch001batch001batch001batch001batch001batch001batch001' },
-      { contentHash: 'batch002batch002batch002batch002batch002batch002batch002batch002' },
-      { contentHash: 'batch003batch003batch003batch003batch003batch003batch003batch003' }
+      { contentHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      { contentHash: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      { contentHash: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' }
     ];
 
     for (const beacon of testBeacons) {
@@ -39,16 +39,16 @@ describe('POST /api/content/batch', () => {
       .post('/api/content/batch')
       .send({
         hashes: [
-          'batch001batch001batch001batch001batch001batch001batch001batch001',
-          'batch002batch002batch002batch002batch002batch002batch002batch002',
-          'nonexistent456nonexistent456nonexistent456nonexistent456nonexist'
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
         ]
       })
       .expect(200);
 
-    expect(response.body).toHaveProperty('batch001batch001batch001batch001batch001batch001batch001batch001');
-    expect(response.body).toHaveProperty('batch002batch002batch002batch002batch002batch002batch002batch002');
-    expect(response.body.nonexistent456nonexistent456nonexistent456nonexistent456nonexist).toBeNull();
+    expect(response.body).toHaveProperty('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(response.body).toHaveProperty('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+    expect(response.body.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd).toBeNull();
   });
 
   it('should enforce maximum batch size of 100', async () => {
@@ -81,7 +81,7 @@ describe('POST /api/content/batch', () => {
   });
 
   it('should handle duplicate hashes in request', async () => {
-    const hash = 'batch001batch001batch001batch001batch001batch001batch001batch001';
+    const hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // Use valid 64-char hex hash
 
     const response = await request(app)
       .post('/api/content/batch')

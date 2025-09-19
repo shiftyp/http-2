@@ -1,0 +1,292 @@
+openapi: 3.0.0
+info:
+  title: Media Transmission API
+  version: 1.0.0
+  description: API for OFDM transmission of media chunks over ham radio
+
+paths:
+  /api/transmission/queue:
+    post:
+      summary: Queue media for transmission
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mediaId
+              properties:
+                mediaId:
+                  type: string
+                priority:
+                  type: string
+                  enum: [emergency, high, normal, low]
+                  default: normal
+                targetCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Specific destination callsign
+      responses:
+        200:
+          description: Media queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+        404:
+          description: Media not found
+        409:
+          description: Media already in queue
+
+    get:
+      summary: Get transmission queue status
+      responses:
+        200:
+          description: Current queue status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueItem'
+                  processingItem:
+                    $ref: '#/components/schemas/QueueItem'
+                  estimatedWaitTime:
+                    type: integer
+                    description: Seconds until next item starts
+
+  /api/transmission/queue/{mediaId}:
+    delete:
+      summary: Remove media from transmission queue
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Removed from queue
+        404:
+          description: Not in queue
+
+  /api/transmission/status/{mediaId}:
+    get:
+      summary: Get transmission status for specific media
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Transmission status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransmissionStatus'
+        404:
+          description: Media not found
+
+  /api/transmission/chunk:
+    post:
+      summary: Transmit specific chunk
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        headers:
+          X-Media-Id:
+            schema:
+              type: string
+          X-Chunk-Index:
+            schema:
+              type: integer
+          X-Chunk-Total:
+            schema:
+              type: integer
+          X-Chunk-Hash:
+            schema:
+              type: string
+      responses:
+        200:
+          description: Chunk transmitted
+        400:
+          description: Invalid chunk data
+
+  /api/transmission/ofdm/allocation:
+    get:
+      summary: Get current OFDM subcarrier allocation
+      responses:
+        200:
+          description: Subcarrier allocation map
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubcarrierAllocation'
+
+    put:
+      summary: Update OFDM subcarrier allocation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientAllocations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      callsign:
+                        type: string
+                      subcarriers:
+                        type: array
+                        items:
+                          type: integer
+                          minimum: 1
+                          maximum: 48
+      responses:
+        200:
+          description: Allocation updated
+
+  /api/transmission/progress/{mediaId}:
+    get:
+      summary: Get real-time transmission progress
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Progress information
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events stream
+
+components:
+  schemas:
+    QueueResponse:
+      type: object
+      properties:
+        position:
+          type: integer
+        estimatedTransmitTime:
+          type: string
+          format: date-time
+        priority:
+          type: string
+        queueLength:
+          type: integer
+
+    QueueItem:
+      type: object
+      properties:
+        mediaId:
+          type: string
+        priority:
+          type: string
+          enum: [emergency, high, normal, low]
+        addedAt:
+          type: string
+          format: date-time
+        position:
+          type: integer
+        estimatedTransmitTime:
+          type: string
+          format: date-time
+        targetCallsign:
+          type: string
+        mediaType:
+          type: string
+          enum: [IMAGE, AUDIO, VIDEO, DOCUMENT]
+        size:
+          type: integer
+
+    TransmissionStatus:
+      type: object
+      properties:
+        mediaId:
+          type: string
+        status:
+          type: string
+          enum: [pending, queued, transmitting, complete, failed, cancelled]
+        priority:
+          type: string
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        chunksTransmitted:
+          type: integer
+        totalChunks:
+          type: integer
+        startTime:
+          type: string
+          format: date-time
+        completionTime:
+          type: string
+          format: date-time
+        estimatedTimeRemaining:
+          type: integer
+        assignedSubcarriers:
+          type: integer
+        retryCount:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              message:
+                type: string
+              chunkIndex:
+                type: integer
+        dataRate:
+          type: integer
+          description: Current bits per second
+
+    SubcarrierAllocation:
+      type: object
+      properties:
+        totalSubcarriers:
+          type: integer
+          default: 48
+        availableSubcarriers:
+          type: integer
+        allocations:
+          type: array
+          items:
+            type: object
+            properties:
+              callsign:
+                type: string
+              subcarriers:
+                type: array
+                items:
+                  type: integer
+              mediaId:
+                type: string
+              priority:
+                type: string
+              dataRate:
+                type: integer
+        fecLevel:
+          type: string
+          description: Forward error correction level
+        modulationMode:
+          type: string
+          enum: [BPSK, QPSK, 8PSK, 16QAM]

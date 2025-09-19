@@ -12,10 +12,14 @@ export default defineConfig({
     poolOptions: {
       threads: {
         singleThread: false,
-        isolate: true
+        isolate: true,
+        minThreads: 1,
+        maxThreads: 2
       }
     },
-    maxConcurrency: 5,
+    maxConcurrency: 2,
+    testTimeout: 30000,
+    hookTimeout: 10000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

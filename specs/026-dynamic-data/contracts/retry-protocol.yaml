@@ -1,0 +1,259 @@
+openapi: 3.0.0
+info:
+  title: Retry Coordination Protocol
+  version: 1.0.0
+  description: Protocol for requesting and coordinating update retransmissions
+
+paths:
+  /api/retry:
+    post:
+      summary: Request update retry
+      description: Licensed station requests retransmission of missed update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - updateId
+                - version
+                - requester
+                - signature
+              properties:
+                updateId:
+                  type: string
+                  description: Update to retry
+                  example: "EMRG-2024-001"
+                version:
+                  type: integer
+                  description: Specific version needed
+                requester:
+                  type: string
+                  pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$'
+                  description: Licensed station callsign
+                signature:
+                  type: string
+                  format: base64
+                  description: ECDSA signature for authentication
+                location:
+                  type: string
+                  description: Grid square for geographic routing
+                  example: "EM48"
+      responses:
+        '202':
+          description: Retry request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                    format: uuid
+                  updateId:
+                    type: string
+                  coordinationWindow:
+                    type: integer
+                    description: Seconds until retry attempt
+                    minimum: 10
+                    maximum: 30
+                  holders:
+                    type: array
+                    items:
+                      type: string
+                    description: Stations that have the update
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid signature or unlicensed station
+        '404':
+          description: Update not found
+        '429':
+          description: Too many retry requests
+
+  /api/retry/{requestId}:
+    get:
+      summary: Check retry request status
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Retry request status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryRequest'
+        '404':
+          description: Request not found
+
+  /api/retry/{requestId}/fulfill:
+    post:
+      summary: Mark retry as fulfilled
+      description: Station reports successful retry transmission
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fulfiller
+                - signature
+              properties:
+                fulfiller:
+                  type: string
+                  pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$'
+                mode:
+                  type: string
+                  enum: [RF, WebRTC]
+                  description: How retry was delivered
+                signature:
+                  type: string
+                  format: base64
+      responses:
+        '200':
+          description: Retry marked as fulfilled
+        '401':
+          description: Unauthorized
+        '404':
+          description: Request not found
+        '409':
+          description: Already fulfilled
+
+  /api/retry/active:
+    get:
+      summary: List active retry requests
+      description: Get all pending retry requests for coordination
+      parameters:
+        - name: updateId
+          in: query
+          schema:
+            type: string
+          description: Filter by update
+        - name: requester
+          in: query
+          schema:
+            type: string
+          description: Filter by requesting station
+        - name: fulfilled
+          in: query
+          schema:
+            type: boolean
+          description: Filter by fulfillment status
+      responses:
+        '200':
+          description: List of retry requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RetryRequest'
+
+# RF Protocol Messages (not REST API)
+rf-protocols:
+  retry-request:
+    description: RF broadcast for retry request
+    format: YAML
+    example: |
+      type: RETRY_REQUEST
+      id: uuid-here
+      updateId: EMRG-2024-001
+      version: 2
+      requester: KD4JKL
+      location: EM48
+      timestamp: 1234567890
+      signature: base64-ecdsa-signature
+
+  retry-response:
+    description: RF response to retry request
+    format: YAML
+    example: |
+      type: RETRY_RESPONSE
+      requestId: uuid-here
+      responder: KB2DEF
+      hasUpdate: true
+      willRetry: true
+      slot: 1  # 0-3, coordination slot
+      mode: QPSK  # Transmission mode
+
+  retry-coordination:
+    description: Coordination between multiple responders
+    format: YAML
+    example: |
+      type: RETRY_COORD
+      requestId: uuid-here
+      stations:
+        - callsign: KB2DEF
+          slot: 1
+          priority: 10  # Based on signal strength
+        - callsign: KC3GHI
+          slot: 2
+          priority: 8
+
+components:
+  schemas:
+    RetryRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        updateId:
+          type: string
+        version:
+          type: integer
+        requester:
+          type: string
+        signature:
+          type: string
+          format: base64
+        timestamp:
+          type: string
+          format: date-time
+        fulfilled:
+          type: boolean
+        fulfiller:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          enum: [RF, WebRTC]
+          nullable: true
+
+    RetryCoordination:
+      type: object
+      properties:
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        slots:
+          type: array
+          items:
+            type: object
+            properties:
+              slot:
+                type: integer
+                minimum: 0
+                maximum: 3
+              station:
+                type: string
+              startTime:
+                type: string
+                format: date-time

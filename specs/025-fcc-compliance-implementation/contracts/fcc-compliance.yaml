@@ -1,0 +1,393 @@
+openapi: 3.0.0
+info:
+  title: FCC Compliance Protocol
+  version: 1.0.0
+  description: Protocol for ensuring FCC Part 97 compliance in amateur radio data transmissions
+
+paths:
+  /compliance/station-id:
+    post:
+      summary: Trigger station identification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                callsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,6}[A-Z]?$'
+                transmissionEnd:
+                  type: boolean
+                  default: false
+                mode:
+                  type: string
+                  enum: [CW, PHONE, DIGITAL]
+                  default: DIGITAL
+      responses:
+        '200':
+          description: Station ID transmitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IDResult'
+        '400':
+          description: Invalid callsign format
+        '429':
+          description: Too frequent ID (less than required interval)
+
+  /compliance/validate-encryption:
+    post:
+      summary: Check if encryption operation is allowed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operation:
+                  type: string
+                  enum: [encrypt, decrypt, sign, verify, hash, ecdh]
+                transmissionMode:
+                  type: string
+                  enum: [RF, WEBRTC, HYBRID]
+                content:
+                  type: string
+                  description: Content to be processed (for audit)
+      responses:
+        '200':
+          description: Operation allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptionResult'
+        '403':
+          description: Operation blocked due to FCC compliance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceViolation'
+
+  /compliance/filter-content:
+    post:
+      summary: Scan content for FCC compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: Text content to scan
+                mimeType:
+                  type: string
+                  description: MIME type of content
+                emergencyMode:
+                  type: boolean
+                  default: false
+                transmissionMode:
+                  type: string
+                  enum: [RF, WEBRTC, HYBRID]
+      responses:
+        '200':
+          description: Content passed filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilterResult'
+        '400':
+          description: Content flagged for review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentWarning'
+        '403':
+          description: Content blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceViolation'
+
+  /compliance/validate-callsign:
+    get:
+      summary: Validate amateur radio callsign
+      parameters:
+        - name: callsign
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{3,6}[A-Z]?$'
+        - name: useCache
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: international
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Callsign validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallsignValidation'
+        '400':
+          description: Invalid callsign format
+        '404':
+          description: Callsign not found in database
+
+  /compliance/log:
+    get:
+      summary: Retrieve compliance audit log
+      parameters:
+        - name: startTime
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: endTime
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: eventType
+          in: query
+          schema:
+            type: string
+            enum: [STATION_ID, ENCRYPTION_BLOCK, CONTENT_FILTER, CALLSIGN_VALIDATION, VIOLATION]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [INFO, WARNING, VIOLATION]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Compliance log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceLogEntry'
+
+    post:
+      summary: Add entry to compliance log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceLogEntry'
+      responses:
+        '201':
+          description: Log entry created
+        '400':
+          description: Invalid log entry format
+
+  /compliance/status:
+    get:
+      summary: Get current compliance status
+      responses:
+        '200':
+          description: Current compliance status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceStatus'
+
+components:
+  schemas:
+    IDResult:
+      type: object
+      properties:
+        transmitted:
+          type: boolean
+        timestamp:
+          type: integer
+          format: int64
+        method:
+          type: string
+          enum: [CW, PHONE, DIGITAL]
+        nextIdDue:
+          type: integer
+          format: int64
+
+    EncryptionResult:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+        operation:
+          type: string
+        reason:
+          type: string
+        transmissionMode:
+          type: string
+
+    FilterResult:
+      type: object
+      properties:
+        passed:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        blockedReasons:
+          type: array
+          items:
+            type: string
+        emergencyOverride:
+          type: boolean
+
+    ContentWarning:
+      type: object
+      properties:
+        flagged:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
+            enum: [PROFANITY, BUSINESS_CONTENT, ENCRYPTED_CONTENT, MUSIC_FILE]
+        requiresConfirmation:
+          type: boolean
+        overrideAllowed:
+          type: boolean
+
+    CallsignValidation:
+      type: object
+      properties:
+        callsign:
+          type: string
+        valid:
+          type: boolean
+        licenseClass:
+          type: string
+          enum: [NOVICE, TECHNICIAN, GENERAL, ADVANCED, EXTRA]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        country:
+          type: string
+        expirationDate:
+          type: integer
+          format: int64
+        source:
+          type: string
+          enum: [FCC, QRZ, LOCAL, CACHE]
+        cacheAge:
+          type: integer
+          description: Age of cached data in seconds
+
+    ComplianceLogEntry:
+      type: object
+      required:
+        - timestamp
+        - eventType
+        - description
+        - severity
+      properties:
+        logId:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+        eventType:
+          type: string
+          enum: [STATION_ID, ENCRYPTION_BLOCK, CONTENT_FILTER, CALLSIGN_VALIDATION, VIOLATION]
+        description:
+          type: string
+        operatorCallsign:
+          type: string
+        transmissionMode:
+          type: string
+          enum: [RF, WEBRTC, HYBRID]
+        severity:
+          type: string
+          enum: [INFO, WARNING, VIOLATION]
+        details:
+          type: object
+        resolved:
+          type: boolean
+          default: false
+
+    ComplianceViolation:
+      type: object
+      properties:
+        violation:
+          type: boolean
+          default: true
+        regulation:
+          type: string
+          description: Specific FCC regulation violated
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [WARNING, VIOLATION, CRITICAL]
+        timestamp:
+          type: integer
+          format: int64
+        logged:
+          type: boolean
+
+    ComplianceStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        operatorCallsign:
+          type: string
+        transmissionMode:
+          type: string
+          enum: [RF, WEBRTC, HYBRID]
+        stationIdTimer:
+          type: object
+          properties:
+            nextDue:
+              type: integer
+              format: int64
+            transmissionActive:
+              type: boolean
+            lastId:
+              type: integer
+              format: int64
+        encryptionGuard:
+          type: object
+          properties:
+            blocking:
+              type: boolean
+            violationCount:
+              type: integer
+        contentFilter:
+          type: object
+          properties:
+            level:
+              type: string
+              enum: [STRICT, MODERATE, PERMISSIVE]
+            emergencyBypass:
+              type: boolean
+        emergencyMode:
+          type: boolean
+        violationCount:
+          type: integer
+        lastViolation:
+          type: integer
+          format: int64

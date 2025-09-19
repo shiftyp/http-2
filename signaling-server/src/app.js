@@ -57,7 +57,7 @@ async function createApp(dbPath = ':memory:') {
           error: error.message,
           suggestion: 'Use certificate request process for additional certificates.'
         });
-      } else if (error.message.includes('Invalid') || error.message.includes('required')) {
+      } else if (error.message.includes('Invalid') || error.message.includes('invalid') || error.message.includes('required') || error.message.includes('callsign')) {
         res.status(400).json({ error: error.message });
       } else {
         res.status(500).json({ error: error.message });

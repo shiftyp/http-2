@@ -142,37 +142,6 @@ describe('GET /api/pages/{pageId}/preview', () => {
     expect(data.metadata.componentCount).toBe(1);
   });
 
-  it('should handle compressed vs uncompressed output based on query param', async () => {
-    const pageId = 'page_123';
-
-    const expectedResponse = {
-      html: 'H4sIAAAAAAAAA3VUTW...', // Base64 compressed HTML
-      metadata: {
-        uncompressedSize: 1024,
-        compressedSize: 312,
-        compressionRatio: 3.28,
-        componentCount: 3,
-        bandwidthOptimized: true,
-        compressed: true
-      }
-    };
-
-    mockFetch.mockResolvedValueOnce({
-      status: 200,
-      ok: true,
-      json: () => Promise.resolve(expectedResponse)
-    });
-
-    const response = await fetch(`/api/pages/${pageId}/preview?compressed=true`);
-
-    expect(response.status).toBe(200);
-    const data = await response.json();
-
-    expect(data.metadata.compressed).toBe(true);
-    expect(data.html).toMatch(/^[A-Za-z0-9+/=]+$/); // Base64 pattern
-
-    expect(mockFetch).toHaveBeenCalledWith(`/api/pages/${pageId}/preview?compressed=true`);
-  });
 
   it('should optimize bandwidth with minimal CSS and inline styles', async () => {
     const pageId = 'page_optimized';

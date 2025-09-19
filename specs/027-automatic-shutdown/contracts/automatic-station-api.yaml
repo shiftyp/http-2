@@ -1,0 +1,286 @@
+openapi: 3.0.3
+info:
+  title: Automatic Station API
+  description: Control operator monitoring and automatic station management
+  version: 1.0.0
+
+paths:
+  /automatic-station/session:
+    post:
+      summary: Start control operator monitoring session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operatorCallsign
+                - operatorCredentials
+                - sessionDuration
+              properties:
+                operatorCallsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                operatorCredentials:
+                  type: object
+                  properties:
+                    publicKey:
+                      type: string
+                    signature:
+                      type: string
+                sessionDuration:
+                  type: integer
+                  minimum: 600
+                  maximum: 14400
+                  description: Session duration in seconds (10 min to 4 hours)
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  sessionToken:
+                    type: string
+                  acknowledementInterval:
+                    type: integer
+                    description: Seconds between required acknowledgments
+                  sessionExpiry:
+                    type: integer
+
+    get:
+      summary: Get current control operator session status
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Current session information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  operatorCallsign:
+                    type: string
+                  sessionActive:
+                    type: boolean
+                  timeRemaining:
+                    type: integer
+                  lastAcknowledgment:
+                    type: integer
+                  nextAcknowledgmentDue:
+                    type: integer
+                  operationMode:
+                    type: string
+                    enum: [manual, automatic, emergency]
+
+    delete:
+      summary: End control operator session
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Session ended successfully
+        '404':
+          description: No active session found
+
+  /automatic-station/operation-mode:
+    get:
+      summary: Get current automatic station operation mode
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Current operation mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currentMode:
+                    type: string
+                    enum: [manual, automatic, emergency, shutdown]
+                  controlOperatorRequired:
+                    type: boolean
+                  automaticOperationsEnabled:
+                    type: boolean
+                  lastModeChange:
+                    type: integer
+                  pendingModeChange:
+                    type: string
+
+    put:
+      summary: Change automatic station operation mode
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestedMode
+                - operatorSignature
+              properties:
+                requestedMode:
+                  type: string
+                  enum: [manual, automatic, emergency]
+                operatorSignature:
+                  type: string
+                  description: ECDSA signature authorizing mode change
+                reason:
+                  type: string
+                  description: Reason for mode change
+      responses:
+        '200':
+          description: Mode change successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  newMode:
+                    type: string
+                  changeEffective:
+                    type: integer
+                  modeChangeId:
+                    type: string
+        '403':
+          description: Mode change not authorized
+        '409':
+          description: Mode change conflicts with current state
+
+  /automatic-station/acknowledge:
+    post:
+      summary: Provide required control operator acknowledgment
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operatorPresent
+                - timestamp
+                - signature
+              properties:
+                operatorPresent:
+                  type: boolean
+                  description: Operator confirms monitoring capability
+                stationStatus:
+                  type: string
+                  enum: [normal, attention_needed, emergency]
+                timestamp:
+                  type: integer
+                signature:
+                  type: string
+                notes:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Acknowledgment recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acknowledgmentId:
+                    type: string
+                  nextAcknowledmentDue:
+                    type: integer
+                  sessionExtended:
+                    type: boolean
+        '400':
+          description: Invalid acknowledgment data
+
+  /automatic-station/third-party-control:
+    get:
+      summary: Get third-party traffic control settings
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Current third-party traffic settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  automaticRelayEnabled:
+                    type: boolean
+                  operatorApprovalRequired:
+                    type: boolean
+                  allowedTrafficTypes:
+                    type: array
+                    items:
+                      type: string
+                  maxRelayDepth:
+                    type: integer
+                  pendingApprovals:
+                    type: array
+                    items:
+                      type: object
+
+    put:
+      summary: Configure third-party traffic handling
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                automaticRelayEnabled:
+                  type: boolean
+                operatorApprovalRequired:
+                  type: boolean
+                allowedTrafficTypes:
+                  type: array
+                  items:
+                    type: string
+                maxRelayDepth:
+                  type: integer
+                  minimum: 1
+                  maximum: 7
+      responses:
+        '200':
+          description: Settings updated successfully
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ControlOperatorSession:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        operatorCallsign:
+          type: string
+        sessionStart:
+          type: integer
+        lastActivity:
+          type: integer
+        acknowledementRequired:
+          type: boolean
+        sessionTimeout:
+          type: integer
+        authority:
+          type: string
+          enum: [control, emergency, monitor]

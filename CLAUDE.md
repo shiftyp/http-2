@@ -7,10 +7,11 @@ Progressive Web Application enabling HTTP communication over amateur radio netwo
 - **Progressive Web App**: React-based PWA with offline capabilities and visual page builder
 - **Radio Interface**: CAT control via Web Serial API, audio via Web Audio API
 - **SDR Integration**: WebUSB-based Software-Defined Radio support for wide-band monitoring
-- **Protocol**: HTTP/1.1 over adaptive QPSK modulation (2.8kHz bandwidth)
+- **Protocol**: HTTP/1.1 over OFDM with 48 parallel subcarriers (100+ kbps) or adaptive QPSK (2.8kHz)
+- **Parallel Transmission**: BitTorrent chunks transmitted simultaneously across OFDM subcarriers
 - **Mesh**: AODV-based store-and-forward routing with visualization
 - **Transmission Modes**: Hybrid WebRTC/RF switching with automatic fallback
-- **Content Distribution**: BitTorrent-style chunking for RF, direct downloads for WebRTC
+- **Content Distribution**: BitTorrent-style chunking with parallel OFDM transmission
 - **Signaling**: Native WebSocket server for internet peer discovery
 - **Visual Builder**: Drag-and-drop component-based page creation system
 
@@ -32,11 +33,12 @@ Progressive Web Application enabling HTTP communication over amateur radio netwo
 - **Callsigns**: Amateur radio identifiers (e.g., KA1ABC)
 - **CAT Control**: Computer Aided Transceiver control protocol
 - **SDR**: Software-Defined Radio for wide-band spectrum monitoring
-- **QPSK**: Quadrature Phase Shift Keying modulation (750-14400 bps)
+- **OFDM**: 48 parallel subcarriers for 100+ kbps throughput (20-50x speedup)
+- **QPSK**: Fallback modulation (750-14400 bps) for compatibility
 - **FCC Part 97**: US amateur radio regulations (no content encryption)
 - **HF Bands**: High Frequency (3-30 MHz) with variable propagation
 - **WebRTC Mode**: High-speed peer-to-peer (1MB/s local, internet via signaling)
-- **RF Mode**: BitTorrent chunks over radio (14.4kbps max, CQ beacon routing)
+- **RF Mode**: Parallel BitTorrent chunks over OFDM (100+ kbps) or QPSK (14.4 kbps)
 - **Hybrid Mode**: Automatic switching between WebRTC and RF protocols
 - **Visual Builder**: Component-based page creation without text editing
 
@@ -119,11 +121,12 @@ tests/ (312 total tests, 219 passing)
 - **Current Status**: 312 tests, 219 passing (70.2%)
 
 ## Recent Changes
-- **Content Registry System**: Implemented server-side CQ beacon storage with 1GB capacity and client-side 50MB cache
-- **Path Consolidation**: Added beacon deduplication achieving 80% storage reduction through path aggregation
-- **Priority Classification**: Disaster-oriented content tiers (P0-P5) with adaptive TTL and network consensus
-- **Shared Schema**: Unified ConsolidatedBeacon format between server SQLite and client IndexedDB storage
-- **Previous**: Transmission modes, BitTorrent protocol, WebRTC transport for hybrid RF/internet operation
+- **FCC Compliance System**: Comprehensive Part 97 compliance with automatic station ID, encryption blocking, content filtering
+- **Station Identification**: 10-minute automatic timer plus end-of-transmission ID per §97.119
+- **Encryption Control**: Runtime blocking of encryption in RF mode, allows signatures only
+- **Content Filtering**: Music file blocking, profanity detection, business content warnings
+- **Callsign Validation**: FCC ULS database integration for mesh relay verification
+- **Previous**: OFDM parallel transmission, content registry, transmission modes
 
 ## Component System Architecture
 - **ComponentType enum**: Defines all available component types
@@ -152,6 +155,9 @@ npm run typecheck        # Run TypeScript checks
 - Station ID every 10 minutes
 - Bandwidth limits per band
 - All transmissions logged
+- **Automatic Station Control**: FCC §97.213 compliance with remote shutdown capability
+- **Control Operator Monitoring**: Required for automatic operation with session timeouts
+- **Fail-Safe Mechanisms**: Hardware-level emergency shutdown independent of software
 
 ## Implemented Libraries
 
@@ -173,6 +179,17 @@ npm run typecheck        # Run TypeScript checks
 - **database**: IndexedDB wrapper using logbook API (no mock data)
 - **logbook**: QSO logging with IndexedDB storage, pages, and mesh node tracking
 
+### FCC Compliance & Automatic Station Libraries
+- **fcc-compliance**: Central compliance manager coordinating all Part 97 requirements
+- **station-id-timer**: 10-minute automatic identification with control operator ID
+- **encryption-guard**: RF mode encryption blocking with transmission mode integration
+- **content-filter**: Prohibited content detection with emergency override capability
+- **callsign-validator**: FCC ULS database integration for mesh relay verification
+- **remote-control**: Multi-channel authenticated remote control (WebSocket, RF, DTMF)
+- **automatic-station**: Control operator session management with periodic acknowledgment
+- **fail-safe-shutdown**: Hardware-level emergency shutdown with equipment monitoring
+- **control-operator**: Session authentication and authority management
+
 ### UI Libraries
 - **jsx-radio**: React-to-template compiler for bandwidth optimization (2-4 byte IDs)
 - **react-renderer**: Virtual DOM diffing for bandwidth-optimized updates
@@ -181,7 +198,7 @@ npm run typecheck        # Run TypeScript checks
 - **Component palette**: Draggable component library with accessibility
 - **Property editor**: Modal-based component configuration
 
-## Performance Targets
+## Performance Target
 - < 500ms transmission initiation
 - 2.8 kHz maximum bandwidth
 - Support 10+ concurrent mesh nodes
@@ -218,8 +235,11 @@ curl http://localhost:8080/health
 - Enhance CQ beacon protocol with content routing intelligence
 - Add WebRTC NAT traversal with TURN server support
 - Deploy signaling server with Docker containerization
+- Complete automatic shutdown system integration (027-automatic-shutdown)
+- Add control operator monitoring UI with real-time status display
+- Implement hardware fail-safe device integration via Web Serial API
 
 ---
-*Context for AI assistance - Version 4.0 - Updated 2025-09-15*
-*Focus: Hybrid transmission modes with BitTorrent and WebRTC protocols*
+*Context for AI assistance - Version 4.1 - Updated 2025-09-19*
+*Focus: FCC Part 97.213 automatic station compliance with remote control and fail-safe shutdown*
 - when fixing tests, always prefer to align implementation with spects to make tests pass. Modify tests only when they don't align with specs, and don't simplify or shortcut implementations to make them pass tests

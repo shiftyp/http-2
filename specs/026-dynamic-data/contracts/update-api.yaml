@@ -1,0 +1,277 @@
+openapi: 3.0.0
+info:
+  title: Dynamic Update API
+  version: 1.0.0
+  description: API for creating and distributing dynamic updates across ham radio network
+
+paths:
+  /api/updates:
+    post:
+      summary: Create new dynamic update
+      description: Licensed stations create time-sensitive updates for distribution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - category
+                - priority
+                - data
+                - subscribers
+                - signature
+              properties:
+                category:
+                  type: string
+                  enum: [emergency, safety, weather, traffic, status, routine]
+                priority:
+                  type: integer
+                  minimum: 0
+                  maximum: 5
+                  description: P0 (emergency) to P5 (routine)
+                data:
+                  type: string
+                  format: base64
+                  maxLength: 68000
+                  description: Update content (max 50KB before encoding)
+                contentType:
+                  type: string
+                  default: application/octet-stream
+                compression:
+                  type: string
+                  enum: [none, lz77, gzip]
+                  default: lz77
+                subscribers:
+                  type: array
+                  items:
+                    type: string
+                    pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$|^UNLICENSED-[0-9]+$'
+                  maxItems: 1000
+                originator:
+                  type: string
+                  pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$'
+                signature:
+                  type: string
+                  format: base64
+                  description: ECDSA signature
+      responses:
+        '201':
+          description: Update created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "EMRG-2024-001"
+                  version:
+                    type: integer
+                    example: 1
+                  etag:
+                    type: string
+                    example: "abc123"
+                  expires:
+                    type: string
+                    format: date-time
+        '400':
+          description: Invalid request data
+        '401':
+          description: Invalid signature or unlicensed station
+        '413':
+          description: Update size exceeds limit
+
+    get:
+      summary: List available updates
+      description: Query updates by various filters
+      parameters:
+        - name: priority
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [emergency, safety, weather, traffic, status, routine]
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: subscriber
+          in: query
+          schema:
+            type: string
+          description: Show updates for specific subscriber
+      responses:
+        '200':
+          description: List of matching updates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UpdateSummary'
+
+  /api/updates/{updateId}:
+    get:
+      summary: Get specific update
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Update details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicUpdate'
+        '404':
+          description: Update not found
+
+  /api/updates/{updateId}/holders:
+    get:
+      summary: Get stations that have this update
+      description: Find peers for WebRTC transfer
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: licensed
+          in: query
+          schema:
+            type: boolean
+          description: Filter by licensed status
+      responses:
+        '200':
+          description: List of stations with update
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    stationId:
+                      type: string
+                    receivedAt:
+                      type: string
+                      format: date-time
+                    licensed:
+                      type: boolean
+                    available:
+                      type: boolean
+
+  /api/updates/{updateId}/delta:
+    get:
+      summary: Get delta between versions
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fromVersion
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: toVersion
+          in: query
+          schema:
+            type: integer
+          description: Latest if omitted
+      responses:
+        '200':
+          description: Delta changes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fromVersion:
+                    type: integer
+                  toVersion:
+                    type: integer
+                  operations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        op:
+                          type: string
+                          enum: [add, remove, replace]
+                        path:
+                          type: string
+                        value:
+                          type: any
+        '404':
+          description: Version not found
+
+components:
+  schemas:
+    UpdateSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        priority:
+          type: integer
+        category:
+          type: string
+        size:
+          type: integer
+        created:
+          type: string
+          format: date-time
+        expires:
+          type: string
+          format: date-time
+        etag:
+          type: string
+
+    DynamicUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        etag:
+          type: string
+        data:
+          type: string
+          format: base64
+        contentType:
+          type: string
+        compression:
+          type: string
+        priority:
+          type: integer
+        category:
+          type: string
+        created:
+          type: string
+          format: date-time
+        expires:
+          type: string
+          format: date-time
+        originator:
+          type: string
+        subscribers:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string

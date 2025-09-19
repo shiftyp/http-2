@@ -1,0 +1,211 @@
+openapi: 3.0.3
+info:
+  title: Remote Control API
+  description: FCC Part 97.213 compliant remote control interface for automatic stations
+  version: 1.0.0
+
+paths:
+  /remote-control/authenticate:
+    post:
+      summary: Authenticate control operator for remote access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - callsign
+                - signature
+                - timestamp
+                - challenge
+              properties:
+                callsign:
+                  type: string
+                  pattern: '^[A-Z0-9]{3,7}$'
+                  description: Amateur radio callsign of control operator
+                signature:
+                  type: string
+                  description: ECDSA signature of challenge
+                timestamp:
+                  type: integer
+                  description: Unix timestamp of authentication request
+                challenge:
+                  type: string
+                  description: Random challenge string for replay protection
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionToken:
+                    type: string
+                    description: JWT token for authenticated session
+                  sessionExpiry:
+                    type: integer
+                    description: Unix timestamp when session expires
+                  operatorAuthority:
+                    type: string
+                    enum: [control, emergency, monitor]
+        '401':
+          description: Authentication failed
+        '403':
+          description: Operator not authorized for automatic station control
+
+  /remote-control/command:
+    post:
+      summary: Execute authenticated remote control command
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command
+                - signature
+                - timestamp
+              properties:
+                command:
+                  type: string
+                  enum: [shutdown, emergency_shutdown, set_automatic, set_manual, acknowledge]
+                parameters:
+                  type: object
+                  description: Optional command-specific parameters
+                signature:
+                  type: string
+                  description: ECDSA signature of command
+                timestamp:
+                  type: integer
+                  description: Unix timestamp of command
+      responses:
+        '200':
+          description: Command executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commandId:
+                    type: string
+                    description: Unique identifier for executed command
+                  executionTime:
+                    type: integer
+                    description: Time taken to execute command in milliseconds
+                  systemState:
+                    type: string
+                    enum: [manual, automatic, emergency, shutdown]
+        '400':
+          description: Invalid command or parameters
+        '401':
+          description: Session expired or invalid
+        '403':
+          description: Insufficient authority for command
+
+  /remote-control/status:
+    get:
+      summary: Get current station status and control information
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Current station status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  systemState:
+                    type: string
+                    enum: [manual, automatic, emergency, shutdown]
+                  transmissionActive:
+                    type: boolean
+                  controlOperator:
+                    type: string
+                    description: Callsign of current control operator
+                  sessionTimeRemaining:
+                    type: integer
+                    description: Seconds until session timeout
+                  acknowledementRequired:
+                    type: boolean
+                  equipmentStatus:
+                    type: object
+                    properties:
+                      power:
+                        type: number
+                      swr:
+                        type: number
+                      frequency:
+                        type: number
+                      temperature:
+                        type: number
+                  lastHeartbeat:
+                    type: integer
+                    description: Unix timestamp of last hardware heartbeat
+
+  /remote-control/heartbeat:
+    post:
+      summary: Send operator heartbeat to maintain session
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - timestamp
+                - operatorPresent
+              properties:
+                timestamp:
+                  type: integer
+                operatorPresent:
+                  type: boolean
+                  description: Operator confirms they are monitoring station
+                notes:
+                  type: string
+                  description: Optional operator notes
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionExtended:
+                    type: boolean
+                  nextHeartbeatDue:
+                    type: integer
+                    description: Unix timestamp when next heartbeat required
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ShutdownEvent:
+      type: object
+      properties:
+        eventId:
+          type: string
+        timestamp:
+          type: integer
+        cause:
+          type: string
+          enum: [operator_command, session_timeout, equipment_fault, emergency, power_failure]
+        initiatingOperator:
+          type: string
+        systemState:
+          type: object
+        emergencyOverride:
+          type: boolean

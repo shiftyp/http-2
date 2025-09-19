@@ -1,0 +1,218 @@
+openapi: 3.0.0
+info:
+  title: Subscription Management API
+  version: 1.0.0
+  description: API for managing subscriptions to dynamic update channels
+
+paths:
+  /api/subscriptions:
+    post:
+      summary: Subscribe to update channel
+      description: Station subscribes to receive specific categories of updates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - stationId
+                - channel
+              properties:
+                stationId:
+                  type: string
+                  pattern: '^[A-Z]{1,2}[0-9]{1}[A-Z]{1,4}$|^UNLICENSED-[0-9]+$'
+                channel:
+                  type: string
+                  description: Update category or specific channel
+                  example: "emergency.missing_person"
+                signature:
+                  type: string
+                  format: base64
+                  description: ECDSA signature (required for licensed stations)
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  stationId:
+                    type: string
+                  channel:
+                    type: string
+                  created:
+                    type: string
+                    format: date-time
+                  active:
+                    type: boolean
+        '400':
+          description: Invalid request
+        '409':
+          description: Subscription already exists
+
+    get:
+      summary: List subscriptions
+      parameters:
+        - name: stationId
+          in: query
+          schema:
+            type: string
+          description: Filter by station
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Filter by channel
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        '200':
+          description: List of subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+
+  /api/subscriptions/{subscriptionId}:
+    get:
+      summary: Get subscription details
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subscription details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '404':
+          description: Subscription not found
+
+    delete:
+      summary: Cancel subscription
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                signature:
+                  type: string
+                  format: base64
+                  description: ECDSA signature for authentication
+      responses:
+        '204':
+          description: Subscription cancelled
+        '401':
+          description: Unauthorized
+        '404':
+          description: Subscription not found
+
+  /api/subscriptions/{subscriptionId}/updates:
+    get:
+      summary: Get pending updates for subscription
+      description: Returns updates matching subscription that haven't been delivered
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Updates since this time
+      responses:
+        '200':
+          description: List of pending updates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    updateId:
+                      type: string
+                    version:
+                      type: integer
+                    priority:
+                      type: integer
+                    size:
+                      type: integer
+                    etag:
+                      type: string
+        '404':
+          description: Subscription not found
+
+  /api/channels:
+    get:
+      summary: List available channels
+      description: Get all update channels/categories available for subscription
+      responses:
+        '200':
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: "emergency.missing_person"
+                    description:
+                      type: string
+                    priority:
+                      type: integer
+                      minimum: 0
+                      maximum: 5
+                    subscriberCount:
+                      type: integer
+
+components:
+  schemas:
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        stationId:
+          type: string
+        channel:
+          type: string
+        created:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+        licensed:
+          type: boolean
+          description: Whether the station is licensed

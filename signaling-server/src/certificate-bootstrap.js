@@ -8,8 +8,9 @@ const Database = require('better-sqlite3');
  * Handles initial certificate establishment for fresh deployments
  */
 class CertificateBootstrap {
-  constructor(dbPath = './data/certificates.db', certsPath = './certificates') {
-    this.dbPath = path.resolve(dbPath);
+  constructor(dbPath = null, certsPath = './certificates') {
+    // Use environment variable if set, otherwise default
+    this.dbPath = path.resolve(dbPath || process.env.CERT_DB_PATH || './data/certificates.db');
     this.certsPath = path.resolve(certsPath);
     this.db = null;
     this.initializeDatabase();
