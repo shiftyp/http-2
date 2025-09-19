@@ -110,15 +110,16 @@ export class ParallelChunkManager {
     if (!this.modem) return [];
 
     const carriers = [];
-    const carrierStatus = this.modem.getCarrierStatus();
+    const stats = this.modem.getStatistics();
+    const config = this.modem.getConfiguration();
 
-    for (let i = 0; i < carrierStatus.length; i++) {
+    for (let i = 0; i < config.numCarriers; i++) {
       if (!this.allocations.has(i) || this.allocations.get(i)?.status === 'completed') {
         // Skip pilot carriers
-        if (!this.isPilotCarrier(i)) {
+        if (!config.pilotCarriers.includes(i)) {
           carriers.push({
             id: i,
-            quality: carrierStatus[i].snr
+            quality: stats.averageSNR // Use average SNR as quality metric
           });
         }
       }
@@ -164,15 +165,19 @@ export class ParallelChunkManager {
     chunk.lastAttempt = Date.now();
 
     try {
-      // Transmit chunk data on specific carrier
-      await this.modem.transmitOnCarrier(carrier.id, chunk.data);
+      // Transmit chunk data using specific carriers
+      const result = await this.modem.transmit(chunk.data, [carrier.id]);
 
-      allocation.status = 'completed';
-      this.completedChunks.add(chunk.id);
-      this.chunkQueue.delete(chunk.id);
+      if (result.success) {
+        allocation.status = 'completed';
+        this.completedChunks.add(chunk.id);
+        this.chunkQueue.delete(chunk.id);
 
-      // Immediately allocate next chunk to this carrier
-      this.allocateChunksToCarriers();
+        // Immediately allocate next chunk to this carrier
+        this.allocateChunksToCarriers();
+      } else {
+        throw new Error(`Transmission failed on carrier ${carrier.id}`);
+      }
 
     } catch (error) {
       allocation.status = 'failed';
@@ -218,14 +223,12 @@ export class ParallelChunkManager {
   private checkCarrierHealth(): void {
     if (!this.modem) return;
 
-    const carrierStatus = this.modem.getCarrierStatus();
+    const stats = this.modem.getStatistics();
 
     for (const [carrierId, allocation] of this.allocations.entries()) {
       if (allocation.status === 'transmitting') {
-        const carrier = carrierStatus[carrierId];
-
-        // If carrier quality dropped significantly, redistribute
-        if (carrier && carrier.snr < allocation.quality * 0.5) {
+        // If overall SNR dropped significantly, redistribute
+        if (stats.averageSNR < allocation.quality * 0.5) {
           this.redistributeChunk(allocation);
         }
       }
@@ -252,8 +255,9 @@ export class ParallelChunkManager {
    * Check if carrier is reserved for pilot tones
    */
   private isPilotCarrier(carrierId: number): boolean {
-    // Reserve every 6th carrier for pilots (8 pilots out of 48)
-    return carrierId % 6 === 0;
+    if (!this.modem) return false;
+    const config = this.modem.getConfiguration();
+    return config.pilotCarriers.includes(carrierId);
   }
 
   /**

@@ -1,5 +1,6 @@
 import { HTTPProtocol, HTTPPacket } from '../http-protocol';
 import { RadioControl } from '../radio-control';
+import { OFDMModem, type OFDMConfiguration, type TransmissionResult } from '../ofdm-modem';
 
 export interface MeshNode {
   callsign: string;
@@ -13,12 +14,16 @@ export interface MeshNode {
     store: boolean;
     gateway: boolean;
     modes: string[];
+    ofdm: boolean; // OFDM capability
+    ofdmCarriers?: number; // Number of OFDM carriers supported
   };
   metrics: {
     packetsRelayed: number;
     packetsDropped: number;
     bytesTransferred: number;
     uptime: number;
+    ofdmThroughput?: number; // OFDM throughput in bps
+    ofdmErrors?: number; // OFDM transmission errors
   };
 }
 
@@ -30,6 +35,8 @@ export interface RoutingTableEntry {
   lastUpdated: number;
   linkQuality: number; // 0-100
   hopCount: number;
+  transmissionMode: 'QPSK' | 'OFDM' | 'AUTO'; // Preferred transmission mode
+  ofdmCapable: boolean; // Whether destination supports OFDM
 }
 
 export interface MeshPacket extends HTTPPacket {
@@ -356,15 +363,16 @@ export class AODVRouter {
     destination: string,
     nextHop: string,
     hopCount: number,
-    sequenceNumber: number
+    sequenceNumber: number,
+    ofdmCapable: boolean = false
   ): void {
     const existingRoute = this.routingTable.get(destination);
-    
+
     // Update if: new route, newer sequence, or better metric
     if (!existingRoute ||
         sequenceNumber > existingRoute.sequenceNumber ||
         (sequenceNumber === existingRoute.sequenceNumber && hopCount < existingRoute.hopCount)) {
-      
+
       this.routingTable.set(destination, {
         destination,
         nextHop,
@@ -372,7 +380,9 @@ export class AODVRouter {
         sequenceNumber,
         lastUpdated: Date.now(),
         linkQuality: 100, // Will be updated based on actual link quality
-        hopCount
+        hopCount,
+        transmissionMode: ofdmCapable ? 'AUTO' : 'QPSK',
+        ofdmCapable
       });
     }
   }
@@ -481,18 +491,23 @@ export class MeshNetwork {
   private router: AODVRouter;
   private protocol: HTTPProtocol;
   private radio: RadioControl;
+  private ofdmModem?: OFDMModem;
   private myNode: MeshNode;
   private messageQueue: Map<string, MeshPacket[]> = new Map();
   private retryQueue: Map<string, { packet: MeshPacket; retries: number }> = new Map();
+  private ofdmEnabled: boolean = false;
 
   constructor(
     callsign: string,
     protocol: HTTPProtocol,
-    radio: RadioControl
+    radio: RadioControl,
+    ofdmModem?: OFDMModem
   ) {
     this.router = new AODVRouter(callsign);
     this.protocol = protocol;
     this.radio = radio;
+    this.ofdmModem = ofdmModem;
+    this.ofdmEnabled = !!ofdmModem;
 
     this.myNode = {
       callsign,
@@ -505,13 +520,19 @@ export class MeshNetwork {
         relay: true,
         store: true,
         gateway: false,
-        modes: ['HTTP-1000', 'HTTP-4800', 'HTTP-5600', 'HTTP-11200']
+        modes: this.ofdmEnabled
+          ? ['HTTP-1000', 'HTTP-4800', 'HTTP-5600', 'HTTP-11200', 'OFDM-100K', 'OFDM-200K']
+          : ['HTTP-1000', 'HTTP-4800', 'HTTP-5600', 'HTTP-11200'],
+        ofdm: this.ofdmEnabled,
+        ofdmCarriers: this.ofdmModem?.getCarrierCount()
       },
       metrics: {
         packetsRelayed: 0,
         packetsDropped: 0,
         bytesTransferred: 0,
-        uptime: 0
+        uptime: 0,
+        ofdmThroughput: 0,
+        ofdmErrors: 0
       }
     };
 
@@ -591,10 +612,75 @@ export class MeshNetwork {
 
   private async transmitPacket(packet: MeshPacket, nextHop: string): Promise<boolean> {
     try {
+      const route = this.router.getRoutingTable().find(r => r.nextHop === nextHop);
+      const useOFDM = this.shouldUseOFDM(route);
+
+      if (useOFDM && this.ofdmModem) {
+        return await this.transmitViaOFDM(packet, nextHop);
+      } else {
+        return await this.transmitViaQPSK(packet, nextHop);
+      }
+    } catch (error) {
+      console.error('Failed to transmit packet:', error);
+
+      // Add to retry queue
+      this.retryQueue.set(packet.routing.messageId, {
+        packet,
+        retries: 0
+      });
+
+      return false;
+    }
+  }
+
+  /**
+   * Transmit packet using OFDM for high throughput
+   */
+  private async transmitViaOFDM(packet: MeshPacket, nextHop: string): Promise<boolean> {
+    if (!this.ofdmModem) return false;
+
+    try {
+      const packetData = new TextEncoder().encode(JSON.stringify(packet));
+
+      // Use OFDM for high-speed transmission
+      const result = await this.ofdmModem.transmit(packetData);
+
+      if (result.success) {
+        this.myNode.metrics.bytesTransferred += packetData.length;
+
+        // Update OFDM metrics
+        if (this.myNode.metrics.ofdmThroughput !== undefined) {
+          this.myNode.metrics.ofdmThroughput = result.throughput;
+        }
+
+        console.log(`OFDM transmission successful: ${result.throughput} bps, SNR: ${result.averageSNR.toFixed(1)} dB`);
+        return true;
+      } else {
+        if (this.myNode.metrics.ofdmErrors !== undefined) {
+          this.myNode.metrics.ofdmErrors++;
+        }
+
+        // Fallback to QPSK if OFDM fails
+        console.log('OFDM transmission failed, falling back to QPSK');
+        return await this.transmitViaQPSK(packet, nextHop);
+      }
+    } catch (error) {
+      console.error('OFDM transmission error:', error);
+
+      // Fallback to QPSK
+      return await this.transmitViaQPSK(packet, nextHop);
+    }
+  }
+
+  /**
+   * Transmit packet using traditional QPSK
+   */
+  private async transmitViaQPSK(packet: MeshPacket, nextHop: string): Promise<boolean> {
+    try {
       // Set radio frequency for next hop (would need frequency allocation logic)
       // await this.radio.setFrequency(this.getFrequencyForNode(nextHop));
 
-      // Transmit packet
+      // Transmit packet via HTTP protocol
       await this.protocol.sendRequest(
         'MESH',
         `/relay/${nextHop}`,
@@ -602,7 +688,8 @@ export class MeshNetwork {
           'X-Mesh-Source': packet.routing.source,
           'X-Mesh-Destination': packet.routing.destination,
           'X-Mesh-TTL': packet.routing.ttl.toString(),
-          'X-Mesh-Hops': packet.routing.hopCount.toString()
+          'X-Mesh-Hops': packet.routing.hopCount.toString(),
+          'X-Mesh-Mode': 'QPSK'
         },
         packet
       );
@@ -610,16 +697,31 @@ export class MeshNetwork {
       this.myNode.metrics.bytesTransferred += JSON.stringify(packet).length;
       return true;
     } catch (error) {
-      console.error('Failed to transmit packet:', error);
-      
-      // Add to retry queue
-      this.retryQueue.set(packet.routing.messageId, {
-        packet,
-        retries: 0
-      });
-      
+      console.error('QPSK transmission error:', error);
       return false;
     }
+  }
+
+  /**
+   * Determine whether to use OFDM based on route capabilities and conditions
+   */
+  private shouldUseOFDM(route?: RoutingTableEntry): boolean {
+    if (!this.ofdmEnabled || !this.ofdmModem) {
+      return false;
+    }
+
+    // Use OFDM if:
+    // 1. Route indicates OFDM capability
+    // 2. Link quality is good enough (>70%)
+    // 3. SNR is sufficient for OFDM operation
+    if (route) {
+      return route.ofdmCapable &&
+             route.linkQuality > 70 &&
+             route.transmissionMode !== 'QPSK';
+    }
+
+    // Default to OFDM if conditions are good
+    return this.myNode.snr > 15; // Minimum SNR for OFDM
   }
 
   private async handleIncomingPacket(packet: MeshPacket): Promise<void> {
@@ -684,14 +786,35 @@ export class MeshNetwork {
       callsign: this.myNode.callsign,
       address: this.myNode.address,
       capabilities: this.myNode.capabilities,
+      ofdmConfig: this.ofdmModem ? {
+        carriers: this.ofdmModem.getCarrierCount(),
+        bandwidth: this.ofdmModem.getBandwidth(),
+        dataRate: this.ofdmModem.getConfiguration().dataRate
+      } : null,
       timestamp: Date.now()
     };
 
+    if (this.ofdmEnabled && this.ofdmModem) {
+      // Send beacon via OFDM for better propagation
+      try {
+        const beaconData = new TextEncoder().encode(JSON.stringify(beacon));
+        await this.ofdmModem.transmit(beaconData);
+      } catch (error) {
+        // Fallback to HTTP protocol
+        await this.sendBeaconViaHTTP(beacon);
+      }
+    } else {
+      await this.sendBeaconViaHTTP(beacon);
+    }
+  }
+
+  private async sendBeaconViaHTTP(beacon: any): Promise<void> {
     await this.protocol.sendRequest(
       'BEACON',
       '/mesh/beacon',
       {
-        'X-Mesh-Type': 'BEACON'
+        'X-Mesh-Type': 'BEACON',
+        'X-Mesh-OFDM': this.ofdmEnabled.toString()
       },
       beacon
     );
@@ -759,13 +882,53 @@ export class MeshNetwork {
   }
 
   getNetworkStats(): any {
+    const ofdmStats = this.ofdmModem ? this.ofdmModem.getStatistics() : null;
+
     return {
       nodes: this.nodes.size,
       routes: this.router.getRoutingTable().length,
       queuedMessages: Array.from(this.messageQueue.values()).reduce((sum, q) => sum + q.length, 0),
       retryQueue: this.retryQueue.size,
       metrics: this.myNode.metrics,
-      totalNodes: this.nodes.size // Expected by integration tests
+      totalNodes: this.nodes.size, // Expected by integration tests
+      ofdm: {
+        enabled: this.ofdmEnabled,
+        carriers: this.ofdmModem?.getCarrierCount() || 0,
+        bandwidth: this.ofdmModem?.getBandwidth() || 0,
+        stats: ofdmStats,
+        ofdmCapableRoutes: this.router.getRoutingTable().filter(r => r.ofdmCapable).length
+      }
+    };
+  }
+
+  /**
+   * Get OFDM-specific network information
+   */
+  getOFDMNetworkInfo(): {
+    enabled: boolean;
+    modemConfig?: OFDMConfiguration;
+    ofdmNodes: number;
+    averageOFDMThroughput: number;
+    totalOFDMErrors: number;
+  } {
+    const ofdmNodes = Array.from(this.nodes.values()).filter(n => n.capabilities.ofdm).length;
+    const ofdmThroughputs = Array.from(this.nodes.values())
+      .map(n => n.metrics.ofdmThroughput || 0)
+      .filter(t => t > 0);
+
+    const averageThroughput = ofdmThroughputs.length > 0
+      ? ofdmThroughputs.reduce((sum, t) => sum + t, 0) / ofdmThroughputs.length
+      : 0;
+
+    const totalErrors = Array.from(this.nodes.values())
+      .reduce((sum, n) => sum + (n.metrics.ofdmErrors || 0), 0);
+
+    return {
+      enabled: this.ofdmEnabled,
+      modemConfig: this.ofdmModem?.getConfiguration(),
+      ofdmNodes,
+      averageOFDMThroughput: averageThroughput,
+      totalOFDMErrors: totalErrors
     };
   }
 

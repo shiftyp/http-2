@@ -555,33 +555,6 @@ export class QPSKModem {
     }
   }
 
-  private demodulate(samples: Float32Array): number[] {
-    const symbols: number[] = [];
-    const samplesPerSymbol = Math.floor(this.config.sampleRate / this.mode.symbolRate);
-    
-    const omega = 2 * Math.PI * (this.mode.carrierFreqs[0] + this.afc) / this.config.sampleRate;
-    
-    for (let i = 0; i < samples.length - samplesPerSymbol; i += samplesPerSymbol) {
-      let I = 0, Q = 0;
-      
-      for (let j = 0; j < samplesPerSymbol; j++) {
-        const t = i + j;
-        I += samples[t] * Math.cos(omega * t);
-        Q += samples[t] * -Math.sin(omega * t);
-      }
-      
-      I /= samplesPerSymbol;
-      Q /= samplesPerSymbol;
-      
-      const symbol = this.mode.modulation === 'QPSK'
-        ? this.demodulateQPSKSymbol(I, Q)
-        : this.demodulate16QAMSymbol(I, Q);
-      
-      symbols.push(this.grayDecode(symbol));
-    }
-    
-    return symbols;
-  }
 
   private demodulateQPSKSymbol(I: number, Q: number): number {
     let symbol = 0;
@@ -696,21 +669,6 @@ export class QPSKModem {
     return modulated;
   }
 
-  // Public demodulate method for tests
-  demodulate(samples: Float32Array): Uint8Array {
-    // Direct demodulation without buffering for tests
-    const symbols = this.demodulateInternal(samples);
-
-    if (symbols.length === 0) {
-      return new Uint8Array(0);
-    }
-
-    const encoded = this.symbolsToBytes(symbols);
-    const decoded = this.viterbiDecode(encoded);
-
-    // Return decoded data even if CRC fails (for tests)
-    return decoded;
-  }
 
   // Rename private demodulate to demodulateInternal
   private demodulateInternal(samples: Float32Array): number[] {

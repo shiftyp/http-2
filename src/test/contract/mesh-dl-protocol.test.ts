@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import request from 'supertest';
-// This will fail until we implement the API endpoints
-import app from '../../src/api/app';
+/**
+ * Contract Test: Mesh DL Protocol API
+ * Tests BitTorrent-style content distribution over ham radio
+ *
+ * CRITICAL: These tests MUST FAIL initially (TDD)
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MeshDLProtocol } from '../../lib/mesh-dl-protocol/index.js';
+import type { ContentChunk, ContentMetadata, TransferSession } from '../../lib/mesh-dl-protocol/index.js';
 
 describe('Mesh DL Protocol API Contract Tests', () => {
   beforeEach(async () => {

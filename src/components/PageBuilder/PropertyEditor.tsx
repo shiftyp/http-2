@@ -3,7 +3,11 @@ import { Card, CardHeader, CardContent } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Toggle } from '../ui/Toggle';
+import { ColorPicker } from '../ui/ColorPicker';
+import { FontSelectorExtended } from '../ui/FontSelector';
+import { SpacingControls } from '../ui/SpacingControls';
 import { PageComponent, ComponentType } from '../../pages/PageBuilder';
+import { RichMediaComponent } from './RichMedia';
 
 interface PropertyEditorProps {
   component: PageComponent;
@@ -119,6 +123,8 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
         return { placeholder: 'Enter text...', type: 'text' };
       case ComponentType.IMAGE:
         return { alt: 'Image', src: '/placeholder.jpg' };
+      case ComponentType.RICH_MEDIA:
+        return { richMedia: null };
       case ComponentType.MARKDOWN:
         return {
           content: '# Sample Heading\n\nThis is a **paragraph** with some text.\n\n- List item 1\n- List item 2\n\n[Link text](https://example.com)\n\n| Column 1 | Column 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |'
@@ -406,6 +412,47 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
           </>
         )}
 
+        {type === ComponentType.RICH_MEDIA && (
+          <div>
+            <label className="block text-sm font-medium mb-3">Rich Media Content</label>
+            {localProperties.richMedia ? (
+              <RichMediaComponent
+                media={localProperties.richMedia}
+                bandwidthLimit={2048} // Default bandwidth limit
+                transmissionMode="hybrid"
+                onCompressionChange={(level) => {
+                  const updatedMedia = {
+                    ...localProperties.richMedia,
+                    compressionLevel: level
+                  };
+                  updateProperties('richMedia', updatedMedia);
+                }}
+                onCodecChange={(codec) => {
+                  const updatedMedia = {
+                    ...localProperties.richMedia,
+                    codec: codec
+                  };
+                  updateProperties('richMedia', updatedMedia);
+                }}
+                onMetadataUpdate={(metadata) => {
+                  const updatedMedia = {
+                    ...localProperties.richMedia,
+                    metadata: metadata
+                  };
+                  updateProperties('richMedia', updatedMedia);
+                }}
+              />
+            ) : (
+              <div className="p-4 bg-gray-800 rounded border border-gray-600 text-center">
+                <p className="text-gray-400 mb-2">No media content configured</p>
+                <p className="text-xs text-gray-500">
+                  Use the "Add Media" button in the toolbar to upload and configure rich media content.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Text styling */}
         <div>
           <label className="block text-sm font-medium mb-1">Text Align</label>
@@ -449,62 +496,136 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   const renderAdvancedProperties = () => {
+    const advancedStyle = component.style?.advanced || {};
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Typography */}
         <div>
-          <label className="block text-sm font-medium mb-1">Text Color</label>
-          <Input
-            value={component.style?.advanced?.color || ''}
-            onChange={(e) => updateStyle('advanced', 'color', e.target.value)}
-            placeholder="#ffffff or white"
+          <FontSelectorExtended
+            value={{
+              fontFamily: advancedStyle.fontFamily,
+              fontSize: advancedStyle.fontSize,
+              fontWeight: advancedStyle.fontWeight,
+              lineHeight: advancedStyle.lineHeight,
+              letterSpacing: advancedStyle.letterSpacing
+            }}
+            onChange={(fontConfig) => {
+              Object.entries(fontConfig).forEach(([key, value]) => {
+                if (value) updateStyle('advanced', key, value);
+              });
+            }}
+            label="Typography"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Background Color</label>
-          <Input
-            value={component.style?.advanced?.backgroundColor || ''}
-            onChange={(e) => updateStyle('advanced', 'backgroundColor', e.target.value)}
-            placeholder="#000000 or black"
+        {/* Colors */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ColorPicker
+            value={advancedStyle.color || ''}
+            onChange={(color) => updateStyle('advanced', 'color', color)}
+            label="Text Color"
+            placeholder="e.g., #ffffff, white"
+          />
+
+          <ColorPicker
+            value={advancedStyle.backgroundColor || ''}
+            onChange={(color) => updateStyle('advanced', 'backgroundColor', color)}
+            label="Background Color"
+            placeholder="e.g., #000000, black"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Padding</label>
-          <Input
-            value={component.style?.advanced?.padding || ''}
-            onChange={(e) => updateStyle('advanced', 'padding', e.target.value)}
-            placeholder="e.g., 10px or 10px 20px"
+        {/* Spacing */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SpacingControls
+            value={advancedStyle.padding || '0'}
+            onChange={(padding) => updateStyle('advanced', 'padding', padding)}
+            label="Padding"
+            type="padding"
+          />
+
+          <SpacingControls
+            value={advancedStyle.margin || '0'}
+            onChange={(margin) => updateStyle('advanced', 'margin', margin)}
+            label="Margin"
+            type="margin"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Margin</label>
-          <Input
-            value={component.style?.advanced?.margin || ''}
-            onChange={(e) => updateStyle('advanced', 'margin', e.target.value)}
-            placeholder="e.g., 10px or 10px 20px"
-          />
+        {/* Border & Effects */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-300">Border</label>
+            <Input
+              value={advancedStyle.border || ''}
+              onChange={(e) => updateStyle('advanced', 'border', e.target.value)}
+              placeholder="e.g., 1px solid #ccc, 2px dashed red"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Border Radius</label>
+              <Input
+                value={advancedStyle.borderRadius || ''}
+                onChange={(e) => updateStyle('advanced', 'borderRadius', e.target.value)}
+                placeholder="e.g., 4px, 50%"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Box Shadow</label>
+              <Input
+                value={advancedStyle.boxShadow || ''}
+                onChange={(e) => updateStyle('advanced', 'boxShadow', e.target.value)}
+                placeholder="e.g., 0 2px 4px rgba(0,0,0,0.1)"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Opacity</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={advancedStyle.opacity || '1'}
+                onChange={(e) => updateStyle('advanced', 'opacity', e.target.value)}
+                className="w-full"
+              />
+              <div className="text-xs text-gray-400 mt-1">
+                {Math.round((parseFloat(advancedStyle.opacity || '1') * 100))}%
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">Z-Index</label>
+              <Input
+                type="number"
+                value={advancedStyle.zIndex || ''}
+                onChange={(e) => updateStyle('advanced', 'zIndex', e.target.value)}
+                placeholder="e.g., 10, 999"
+              />
+            </div>
+          </div>
         </div>
 
+        {/* Custom CSS */}
         <div>
-          <label className="block text-sm font-medium mb-1">Border</label>
-          <Input
-            value={component.style?.advanced?.border || ''}
-            onChange={(e) => updateStyle('advanced', 'border', e.target.value)}
-            placeholder="e.g., 1px solid #ccc"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Custom CSS</label>
+          <label className="block text-sm font-medium mb-1 text-gray-300">Custom CSS</label>
           <textarea
-            value={component.style?.advanced?.customCSS || ''}
+            value={advancedStyle.customCSS || ''}
             onChange={(e) => updateStyle('advanced', 'customCSS', e.target.value)}
-            placeholder="Enter custom CSS..."
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm"
+            placeholder="Enter custom CSS properties..."
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm text-white placeholder-gray-400 font-mono"
             rows={4}
           />
+          <div className="text-xs text-gray-400 mt-1">
+            Enter CSS properties like: transform: rotate(45deg); transition: all 0.3s ease;
+          </div>
         </div>
       </div>
     );
@@ -570,78 +691,283 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({
     );
   };
 
+  const moveChildComponent = (childId: string, direction: 'up' | 'down') => {
+    const children = component.children || [];
+    const currentIndex = children.findIndex(child => child.id === childId);
+
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= children.length) return;
+
+    const reorderedChildren = [...children];
+    [reorderedChildren[currentIndex], reorderedChildren[newIndex]] =
+      [reorderedChildren[newIndex], reorderedChildren[currentIndex]];
+
+    onUpdate({ children: reorderedChildren });
+  };
+
+  const duplicateChildComponent = (childId: string) => {
+    const children = component.children || [];
+    const childToDuplicate = children.find(child => child.id === childId);
+
+    if (!childToDuplicate) return;
+
+    const duplicatedChild: PageComponent = {
+      ...childToDuplicate,
+      id: `${childToDuplicate.id}-copy-${Date.now()}`,
+      children: childToDuplicate.children?.map(grandchild => ({
+        ...grandchild,
+        id: `${grandchild.id}-copy-${Date.now()}`
+      }))
+    };
+
+    const updatedChildren = [...children, duplicatedChild];
+    onUpdate({ children: updatedChildren });
+  };
+
+  const validateChildComponent = (child: PageComponent): { valid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    // Check for required properties
+    if ((child.type === ComponentType.HEADING || child.type === ComponentType.PARAGRAPH ||
+         child.type === ComponentType.TEXT || child.type === ComponentType.BUTTON) &&
+        !child.properties.content) {
+      errors.push('Content is required');
+    }
+
+    if (child.type === ComponentType.LINK && !child.properties.href) {
+      errors.push('URL is required for links');
+    }
+
+    if (child.type === ComponentType.IMAGE && (!child.properties.src || !child.properties.alt)) {
+      errors.push('Image URL and alt text are required');
+    }
+
+    // Check for nesting depth (max 3 levels)
+    const getDepth = (comp: PageComponent, depth = 0): number => {
+      if (!comp.children || comp.children.length === 0) return depth;
+      return Math.max(...comp.children.map(child => getDepth(child, depth + 1)));
+    };
+
+    if (getDepth(child) > 2) {
+      errors.push('Maximum nesting depth of 3 levels exceeded');
+    }
+
+    return { valid: errors.length === 0, errors };
+  };
+
+  const getComponentBandwidthEstimate = (child: PageComponent): number => {
+    const baseSize = 50; // Base component overhead
+    const contentSize = (child.properties.content || '').length;
+    const childrenSize = (child.children || []).reduce((total, grandchild) =>
+      total + getComponentBandwidthEstimate(grandchild), 0);
+
+    return baseSize + contentSize + childrenSize;
+  };
+
   const renderChildrenProperties = () => {
     const children = component.children || [];
+    const totalBandwidth = children.reduce((total, child) => total + getComponentBandwidthEstimate(child), 0);
+    const maxChildrenRecommended = 10; // Performance recommendation
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium">Child Components ({children.length})</h4>
-          <select
-            onChange={(e) => {
-              if (e.target.value) {
-                addChildComponent(e.target.value as ComponentType);
-                e.target.value = '';
-              }
-            }}
-            className="text-xs px-2 py-1 bg-gray-700 border border-gray-600 rounded"
-            defaultValue=""
-          >
-            <option value="">Add Child...</option>
-            <option value={ComponentType.HEADING}>Heading</option>
-            <option value={ComponentType.PARAGRAPH}>Paragraph</option>
-            <option value={ComponentType.TEXT}>Text</option>
-            <option value={ComponentType.BUTTON}>Button</option>
-            <option value={ComponentType.LINK}>Link</option>
-            <option value={ComponentType.INPUT}>Input</option>
-            <option value={ComponentType.IMAGE}>Image</option>
-            <option value={ComponentType.DIVIDER}>Divider</option>
-          </select>
+        {/* Header with stats */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">Child Components ({children.length})</h4>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-gray-400">
+                ~{totalBandwidth}B
+              </span>
+              {children.length > maxChildrenRecommended && (
+                <span className="text-xs text-yellow-400" title="Consider reducing children for better performance">
+                  ⚠️
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Add child controls */}
+          <div className="flex items-center space-x-2">
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  addChildComponent(e.target.value as ComponentType);
+                  e.target.value = '';
+                }
+              }}
+              className="text-xs px-2 py-1 bg-gray-700 border border-gray-600 rounded flex-1"
+              defaultValue=""
+            >
+              <option value="">Add Child Component...</option>
+              <optgroup label="Text Components">
+                <option value={ComponentType.HEADING}>Heading</option>
+                <option value={ComponentType.PARAGRAPH}>Paragraph</option>
+                <option value={ComponentType.TEXT}>Text</option>
+              </optgroup>
+              <optgroup label="Interactive Components">
+                <option value={ComponentType.BUTTON}>Button</option>
+                <option value={ComponentType.LINK}>Link</option>
+                <option value={ComponentType.INPUT}>Input</option>
+              </optgroup>
+              <optgroup label="Media & Layout">
+                <option value={ComponentType.IMAGE}>Image</option>
+                <option value={ComponentType.DIVIDER}>Divider</option>
+                <option value={ComponentType.CONTAINER}>Container</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
 
         {children.length === 0 ? (
-          <div className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-600 rounded">
-            No child components. Add one using the dropdown above.
+          <div className="text-sm text-gray-400 text-center py-6 border border-dashed border-gray-600 rounded">
+            <div className="mb-2">🧩</div>
+            <div className="font-medium mb-1">No child components</div>
+            <div className="text-xs">Add components to create a nested hierarchy</div>
           </div>
         ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {children.map((child, index) => (
-              <div
-                key={child.id}
-                className="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700"
-              >
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs bg-gray-700 px-2 py-1 rounded">
-                    {child.type.toUpperCase()}
-                  </span>
-                  <span className="text-sm truncate max-w-24">
-                    {child.properties?.content || child.properties?.placeholder || `${child.type} ${index + 1}`}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <button
-                    onClick={() => onSelectChild && onSelectChild(child)}
-                    className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded"
-                    title="Edit this child"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => removeChildComponent(child.id)}
-                    className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 rounded"
-                    title="Delete this child"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+          <div className="space-y-2">
+            {/* Children list with enhanced controls */}
+            <div className="max-h-80 overflow-y-auto space-y-2 border border-gray-700 rounded p-2">
+              {children.map((child, index) => {
+                const validation = validateChildComponent(child);
+                const bandwidthEstimate = getComponentBandwidthEstimate(child);
 
-        {children.length > 0 && (
-          <div className="text-xs text-gray-400">
-            Children inherit the parent's grid position and are rendered nested inside.
+                return (
+                  <div
+                    key={child.id}
+                    className={`p-3 rounded border transition-colors ${
+                      validation.valid
+                        ? 'bg-gray-800 border-gray-700 hover:border-gray-600'
+                        : 'bg-red-900/20 border-red-500/50'
+                    }`}
+                  >
+                    {/* Component header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          validation.valid ? 'bg-gray-700 text-gray-300' : 'bg-red-600 text-white'
+                        }`}>
+                          {child.type.toUpperCase()}
+                        </span>
+                        <span className="text-sm truncate max-w-32 font-medium">
+                          {child.properties?.content || child.properties?.placeholder || `${child.type} ${index + 1}`}
+                        </span>
+                        {child.children && child.children.length > 0 && (
+                          <span className="text-xs bg-blue-600 text-white px-1 rounded-full">
+                            {child.children.length}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-1">
+                        <span className="text-xs text-gray-400">{bandwidthEstimate}B</span>
+                      </div>
+                    </div>
+
+                    {/* Validation errors */}
+                    {!validation.valid && (
+                      <div className="mb-2">
+                        <div className="text-xs text-red-400 space-y-1">
+                          {validation.errors.map((error, idx) => (
+                            <div key={idx} className="flex items-center space-x-1">
+                              <span>⚠️</span>
+                              <span>{error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1">
+                        {/* Move up/down */}
+                        <button
+                          onClick={() => moveChildComponent(child.id, 'up')}
+                          disabled={index === 0}
+                          className={`text-xs px-2 py-1 rounded ${
+                            index === 0
+                              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                              : 'bg-gray-600 hover:bg-gray-500 text-white'
+                          }`}
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          onClick={() => moveChildComponent(child.id, 'down')}
+                          disabled={index === children.length - 1}
+                          className={`text-xs px-2 py-1 rounded ${
+                            index === children.length - 1
+                              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                              : 'bg-gray-600 hover:bg-gray-500 text-white'
+                          }`}
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                      </div>
+
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => duplicateChildComponent(child.id)}
+                          className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-white"
+                          title="Duplicate component"
+                        >
+                          📄
+                        </button>
+                        <button
+                          onClick={() => onSelectChild && onSelectChild(child)}
+                          className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          title="Edit component"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => removeChildComponent(child.id)}
+                          className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white"
+                          title="Delete component"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Summary information */}
+            <div className="text-xs text-gray-400 bg-gray-800 p-2 rounded">
+              <div className="grid grid-cols-2 gap-2">
+                <div>Children: {children.length}</div>
+                <div>Bandwidth: ~{totalBandwidth}B</div>
+                <div>Max Depth: {Math.max(...children.map(child => {
+                  const getDepth = (comp: PageComponent, depth = 1): number => {
+                    if (!comp.children || comp.children.length === 0) return depth;
+                    return Math.max(...comp.children.map(child => getDepth(child, depth + 1)));
+                  };
+                  return getDepth(child);
+                }), 1)}</div>
+                <div>Valid: {children.filter(child => validateChildComponent(child).valid).length}/{children.length}</div>
+              </div>
+            </div>
+
+            {/* Performance warnings */}
+            {children.length > maxChildrenRecommended && (
+              <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded border border-yellow-500/30">
+                ⚠️ Performance tip: Consider using fewer child components ({children.length}/{maxChildrenRecommended}) or breaking into multiple containers.
+              </div>
+            )}
+
+            {totalBandwidth > 1024 && (
+              <div className="text-xs text-orange-400 bg-orange-900/20 p-2 rounded border border-orange-500/30">
+                📡 Bandwidth warning: Child components exceed 1KB. Consider optimizing content or using compression.
+              </div>
+            )}
           </div>
         )}
       </div>

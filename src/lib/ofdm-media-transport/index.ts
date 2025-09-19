@@ -239,21 +239,26 @@ export class OFDMMediaTransport {
       if (config.pilotCarriers.includes(i)) continue;
       if (this.carrierAllocations.has(i)) continue;
       if (requestedCarriers && !requestedCarriers.includes(i)) continue;
-      
+
       const health = this.modem.getCarrierHealth(i);
       if (health.enabled && health.snr > 10) {
         availableCarriers.push(i);
       }
     }
 
-    // Allocate based on priority and size
-    const needed = Math.min(
-      availableCarriers.length,
-      Math.ceil(transmission.data.length / 1000) // Rough estimate
+    // Calculate optimal carrier allocation for parallel transmission
+    const maxChunkSize = 1500; // Optimal chunk size for radio transmission
+    const minCarriers = Math.ceil(transmission.data.length / maxChunkSize);
+    const maxCarriers = Math.min(availableCarriers.length, 16); // Limit to prevent over-fragmentation
+
+    // Allocate based on data size and available carriers
+    const needed = Math.max(
+      minCarriers,
+      Math.min(maxCarriers, Math.ceil(transmission.data.length / 1000))
     );
 
     const allocated = availableCarriers.slice(0, needed);
-    
+
     // Mark as allocated
     for (const carrier of allocated) {
       this.carrierAllocations.set(carrier, transmission.id);

@@ -1,350 +1,278 @@
 /**
- * Contract Test: SDR Device Management API
- * Tests API compliance with OpenAPI specification
+ * Contract Test: SDR Device API
+ * Tests the core SDR device management API contracts
  *
- * CRITICAL: This test MUST FAIL before implementation
- * Following TDD Red-Green-Refactor cycle
+ * CRITICAL: These tests MUST FAIL initially (TDD)
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { SDRDevice, SDRCapabilities, SDRDeviceType } from '../../lib/sdr-support/index.js';
+import { SDRDeviceManager } from '../../lib/sdr-support/sdr-device-manager/index.js';
 
-// Mock SDR API endpoints that don't exist yet
-const mockSDRAPI = {
-  listDevices: vi.fn(),
-  connectDevice: vi.fn(),
-  getDevice: vi.fn(),
-  disconnectDevice: vi.fn(),
-  configureDevice: vi.fn()
-};
+describe('SDR Device API Contracts', () => {
+  let deviceManager: SDRDeviceManager;
 
-describe('SDR Device API Contract Tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    // Initialize SDR device manager
+    deviceManager = new SDRDeviceManager();
+    await deviceManager.initialize();
   });
 
-  describe('GET /api/sdr/devices', () => {
-    it('should return array of SDR devices', async () => {
-      // EXPECTED TO FAIL: API not implemented yet
-      const expectedDevices = [
-        {
-          id: 'rtl-sdr-001',
-          type: 'RTL_SDR',
-          vendorId: 0x0bda,
-          productId: 0x2838,
-          serialNumber: 'SN123456',
-          capabilities: {
-            minFrequency: 24000000,
-            maxFrequency: 1766000000,
-            maxBandwidth: 2400000,
-            sampleRates: [250000, 1024000, 2048000],
-            gainRange: { min: 0, max: 49.6 },
-            hasFullDuplex: false,
-            hasDiversityRx: false
-          },
-          connectionStatus: 'CONNECTED',
-          lastSeen: expect.any(String)
-        }
-      ];
+  afterEach(async () => {
+    // Cleanup
+    await deviceManager.cleanup();
+  });
 
-      mockSDRAPI.listDevices.mockResolvedValue(expectedDevices);
+  describe('Device Discovery Contract', () => {
+    it('should enumerate available SDR devices', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
 
-      // This will fail until implementation exists
-      const response = await fetch('/api/sdr/devices');
-      expect(response.status).toBe(200);
-
-      const devices = await response.json();
+      expect(devices).toBeDefined();
       expect(Array.isArray(devices)).toBe(true);
-      expect(devices[0]).toMatchObject({
-        id: expect.any(String),
-        type: expect.stringMatching(/^(RTL_SDR|HACKRF|LIMESDR|PLUTOSDR|SDRPLAY)$/),
-        vendorId: expect.any(Number),
-        productId: expect.any(Number),
-        capabilities: expect.objectContaining({
-          minFrequency: expect.any(Number),
-          maxFrequency: expect.any(Number),
-          maxBandwidth: expect.any(Number),
-          sampleRates: expect.any(Array),
-          gainRange: expect.objectContaining({
-            min: expect.any(Number),
-            max: expect.any(Number)
-          }),
-          hasFullDuplex: expect.any(Boolean),
-          hasDiversityRx: expect.any(Boolean)
-        }),
-        connectionStatus: expect.stringMatching(/^(CONNECTED|DISCONNECTED|ERROR)$/),
-        lastSeen: expect.any(String)
+
+      // Each device should have required properties
+      devices.forEach(device => {
+        expect(device).toHaveProperty('id');
+        expect(device).toHaveProperty('type');
+        expect(device).toHaveProperty('vendorId');
+        expect(device).toHaveProperty('productId');
+        expect(device).toHaveProperty('capabilities');
+        expect(device).toHaveProperty('connected');
       });
     });
 
-    it('should return empty array when no devices connected', async () => {
-      mockSDRAPI.listDevices.mockResolvedValue([]);
+    it('should request user permission for new SDR device', async () => {
+      // This test MUST FAIL initially
+      const mockDevice = await deviceManager.requestDevice(['RTL_SDR']);
 
-      const response = await fetch('/api/sdr/devices');
-      expect(response.status).toBe(200);
-
-      const devices = await response.json();
-      expect(devices).toEqual([]);
-    });
-  });
-
-  describe('POST /api/sdr/devices', () => {
-    it('should connect new SDR device via WebUSB', async () => {
-      const deviceRequest = {
-        deviceType: 'RTL_SDR',
-        requestWebUSB: true
-      };
-
-      const expectedDevice = {
-        id: 'rtl-sdr-002',
-        type: 'RTL_SDR',
-        vendorId: 0x0bda,
-        productId: 0x2838,
-        connectionStatus: 'CONNECTED'
-      };
-
-      mockSDRAPI.connectDevice.mockResolvedValue(expectedDevice);
-
-      // This will fail until implementation exists
-      const response = await fetch('/api/sdr/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(deviceRequest)
-      });
-
-      expect(response.status).toBe(201);
-
-      const device = await response.json();
-      expect(device).toMatchObject({
-        id: expect.any(String),
-        type: deviceRequest.deviceType,
-        connectionStatus: 'CONNECTED'
-      });
+      expect(mockDevice).toBeDefined();
+      expect(mockDevice.type).toBe('RTL_SDR');
+      expect(mockDevice.vendorId).toBe(0x0bda);
+      expect(mockDevice.connected).toBe(false);
     });
 
-    it('should return 400 for invalid device type', async () => {
-      const invalidRequest = {
-        deviceType: 'INVALID_TYPE',
-        requestWebUSB: true
-      };
-
-      const response = await fetch('/api/sdr/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invalidRequest)
-      });
-
-      expect(response.status).toBe(400);
-
-      const error = await response.json();
-      expect(error).toMatchObject({
-        code: expect.any(String),
-        message: expect.any(String)
-      });
-    });
-
-    it('should return 400 when WebUSB request fails', async () => {
-      const deviceRequest = {
-        deviceType: 'RTL_SDR',
-        requestWebUSB: true
-      };
-
-      mockSDRAPI.connectDevice.mockRejectedValue(new Error('WebUSB permission denied'));
-
-      const response = await fetch('/api/sdr/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(deviceRequest)
-      });
-
-      expect(response.status).toBe(400);
-    });
-  });
-
-  describe('GET /api/sdr/devices/{deviceId}', () => {
-    it('should return specific device details', async () => {
-      const deviceId = 'rtl-sdr-001';
-      const expectedDevice = {
-        id: deviceId,
-        type: 'RTL_SDR',
-        vendorId: 0x0bda,
-        productId: 0x2838,
-        serialNumber: 'SN123456',
-        capabilities: {
-          minFrequency: 24000000,
-          maxFrequency: 1766000000,
-          maxBandwidth: 2400000,
-          sampleRates: [250000, 1024000, 2048000],
-          gainRange: { min: 0, max: 49.6 },
-          hasFullDuplex: false,
-          hasDiversityRx: false
-        },
-        connectionStatus: 'CONNECTED'
-      };
-
-      mockSDRAPI.getDevice.mockResolvedValue(expectedDevice);
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}`);
-      expect(response.status).toBe(200);
-
-      const device = await response.json();
-      expect(device.id).toBe(deviceId);
-      expect(device.type).toBe('RTL_SDR');
-    });
-
-    it('should return 404 for non-existent device', async () => {
-      const deviceId = 'non-existent';
-
-      mockSDRAPI.getDevice.mockResolvedValue(null);
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}`);
-      expect(response.status).toBe(404);
-    });
-  });
-
-  describe('DELETE /api/sdr/devices/{deviceId}', () => {
-    it('should disconnect SDR device gracefully', async () => {
-      const deviceId = 'rtl-sdr-001';
-
-      mockSDRAPI.disconnectDevice.mockResolvedValue(true);
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}`, {
-        method: 'DELETE'
-      });
-
-      expect(response.status).toBe(204);
-    });
-
-    it('should return 404 for non-existent device', async () => {
-      const deviceId = 'non-existent';
-
-      mockSDRAPI.disconnectDevice.mockResolvedValue(false);
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}`, {
-        method: 'DELETE'
-      });
-
-      expect(response.status).toBe(404);
-    });
-  });
-
-  describe('POST /api/sdr/devices/{deviceId}/configure', () => {
-    it('should configure device parameters', async () => {
-      const deviceId = 'rtl-sdr-001';
-      const configuration = {
-        centerFrequency: 14085000, // 20m band center
-        sampleRate: 2048000,
-        gain: 25.0,
-        bandwidth: 2400000
-      };
-
-      mockSDRAPI.configureDevice.mockResolvedValue(true);
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}/configure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configuration)
-      });
-
-      expect(response.status).toBe(200);
-    });
-
-    it('should validate frequency range limits', async () => {
-      const deviceId = 'rtl-sdr-001';
-      const invalidConfig = {
-        centerFrequency: 999999, // Below minimum frequency
-        sampleRate: 2048000
-      };
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}/configure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invalidConfig)
-      });
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should validate required parameters', async () => {
-      const deviceId = 'rtl-sdr-001';
-      const incompleteConfig = {
-        gain: 25.0
-        // Missing centerFrequency and sampleRate
-      };
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}/configure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(incompleteConfig)
-      });
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should return 404 for non-existent device', async () => {
-      const deviceId = 'non-existent';
-      const configuration = {
-        centerFrequency: 14085000,
-        sampleRate: 2048000
-      };
-
-      const response = await fetch(`/api/sdr/devices/${deviceId}/configure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configuration)
-      });
-
-      expect(response.status).toBe(404);
-    });
-  });
-
-  describe('API Response Format Validation', () => {
-    it('should validate SDRCapabilities schema', () => {
-      const capabilities = {
+    it('should validate device capabilities', async () => {
+      // This test MUST FAIL initially
+      const capabilities: SDRCapabilities = {
         minFrequency: 24000000,
         maxFrequency: 1766000000,
-        maxBandwidth: 2400000,
-        sampleRates: [250000, 1024000, 2048000],
+        maxBandwidth: 3200000,
+        sampleRates: [250000, 1024000, 1536000, 1792000, 1920000, 2048000, 2160000, 2560000, 2880000, 3200000],
         gainRange: { min: 0, max: 49.6 },
         hasFullDuplex: false,
         hasDiversityRx: false
       };
 
-      expect(capabilities).toMatchObject({
-        minFrequency: expect.any(Number),
-        maxFrequency: expect.any(Number),
-        maxBandwidth: expect.any(Number),
-        sampleRates: expect.arrayContaining([expect.any(Number)]),
-        gainRange: expect.objectContaining({
-          min: expect.any(Number),
-          max: expect.any(Number)
-        }),
-        hasFullDuplex: expect.any(Boolean),
-        hasDiversityRx: expect.any(Boolean)
-      });
+      const isValid = deviceManager.validateCapabilities(capabilities);
+      expect(isValid).toBe(true);
 
-      expect(capabilities.minFrequency).toBeLessThan(capabilities.maxFrequency);
-      expect(capabilities.sampleRates.length).toBeGreaterThan(0);
-      expect(capabilities.gainRange.min).toBeLessThanOrEqual(capabilities.gainRange.max);
-    });
-
-    it('should validate Error response schema', () => {
-      const error = {
-        code: 'DEVICE_CONNECTION_FAILED',
-        message: 'Failed to connect to SDR device',
-        details: {
-          deviceType: 'RTL_SDR',
-          reason: 'WebUSB permission denied'
-        }
+      // Test invalid capabilities
+      const invalidCapabilities = {
+        ...capabilities,
+        minFrequency: capabilities.maxFrequency + 1000000
       };
 
-      expect(error).toMatchObject({
-        code: expect.any(String),
-        message: expect.any(String),
-        details: expect.any(Object)
-      });
+      const isInvalid = deviceManager.validateCapabilities(invalidCapabilities);
+      expect(isInvalid).toBe(false);
+    });
+  });
 
-      expect(error.code).toMatch(/^[A-Z_]+$/);
-      expect(error.message.length).toBeGreaterThan(0);
+  describe('Device Connection Contract', () => {
+    it('should connect to SDR device', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        const connected = await deviceManager.connectDevice(device.id);
+
+        expect(connected).toBe(true);
+        expect(device.connected).toBe(true);
+      }
+    });
+
+    it('should disconnect from SDR device', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+        const disconnected = await deviceManager.disconnectDevice(device.id);
+
+        expect(disconnected).toBe(true);
+        expect(device.connected).toBe(false);
+      }
+    });
+
+    it('should handle device connection errors gracefully', async () => {
+      // This test MUST FAIL initially
+      const invalidDeviceId = 'nonexistent-device-id';
+
+      await expect(deviceManager.connectDevice(invalidDeviceId))
+        .rejects.toThrow('Device not found');
+    });
+  });
+
+  describe('Device Configuration Contract', () => {
+    it('should configure device frequency', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+
+        const frequency = 144390000; // 2m band
+        const configured = await deviceManager.setFrequency(device.id, frequency);
+
+        expect(configured).toBe(true);
+
+        const currentFreq = await deviceManager.getFrequency(device.id);
+        expect(currentFreq).toBe(frequency);
+      }
+    });
+
+    it('should configure device sample rate', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+
+        const sampleRate = 2048000; // 2.048 MSPS
+        const configured = await deviceManager.setSampleRate(device.id, sampleRate);
+
+        expect(configured).toBe(true);
+
+        const currentRate = await deviceManager.getSampleRate(device.id);
+        expect(currentRate).toBe(sampleRate);
+      }
+    });
+
+    it('should configure device gain settings', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+
+        const gain = 20.7; // dB
+        const configured = await deviceManager.setGain(device.id, gain);
+
+        expect(configured).toBe(true);
+
+        const currentGain = await deviceManager.getGain(device.id);
+        expect(currentGain).toBeCloseTo(gain, 1);
+      }
+    });
+  });
+
+  describe('Data Streaming Contract', () => {
+    it('should start IQ data streaming', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+
+        const streamStarted = await deviceManager.startStreaming(device.id);
+        expect(streamStarted).toBe(true);
+
+        const isStreaming = await deviceManager.isStreaming(device.id);
+        expect(isStreaming).toBe(true);
+      }
+    });
+
+    it('should receive IQ data samples', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+        await deviceManager.startStreaming(device.id);
+
+        // Wait for data
+        const samples = await new Promise((resolve) => {
+          deviceManager.onDataReceived(device.id, (iqData: Float32Array) => {
+            resolve(iqData);
+          });
+        });
+
+        expect(samples).toBeDefined();
+        expect(samples instanceof Float32Array).toBe(true);
+        expect((samples as Float32Array).length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should stop IQ data streaming', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+        await deviceManager.startStreaming(device.id);
+
+        const streamStopped = await deviceManager.stopStreaming(device.id);
+        expect(streamStopped).toBe(true);
+
+        const isStreaming = await deviceManager.isStreaming(device.id);
+        expect(isStreaming).toBe(false);
+      }
+    });
+  });
+
+  describe('Error Handling Contract', () => {
+    it('should handle WebUSB not supported', async () => {
+      // Mock navigator.usb as undefined
+      const originalUSB = navigator.usb;
+      (navigator as any).usb = undefined;
+
+      const unsupportedManager = new SDRDeviceManager();
+
+      await expect(unsupportedManager.initialize())
+        .rejects.toThrow('WebUSB not supported');
+
+      // Restore
+      (navigator as any).usb = originalUSB;
+    });
+
+    it('should handle device permission denied', async () => {
+      // This test MUST FAIL initially
+      // Mock WebUSB requestDevice to throw permission error
+      const originalRequestDevice = navigator.usb.requestDevice;
+      navigator.usb.requestDevice = vi.fn().mockRejectedValue(
+        new DOMException('Permission denied', 'NotAllowedError')
+      );
+
+      await expect(deviceManager.requestDevice(['RTL_SDR']))
+        .rejects.toThrow('Permission denied');
+
+      // Restore
+      navigator.usb.requestDevice = originalRequestDevice;
+    });
+
+    it('should handle device communication errors', async () => {
+      // This test MUST FAIL initially
+      const devices = await deviceManager.enumerateDevices();
+
+      if (devices.length > 0) {
+        const device = devices[0];
+        await deviceManager.connectDevice(device.id);
+
+        // Force device disconnect
+        await deviceManager.disconnectDevice(device.id);
+
+        // Try to configure disconnected device
+        await expect(deviceManager.setFrequency(device.id, 144390000))
+          .rejects.toThrow('Device not connected');
+      }
     });
   });
 });

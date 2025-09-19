@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import { ChakraProvider } from '@chakra-ui/react';
 import Dashboard from './pages/Dashboard';
 import ContentCreator from './pages/ContentCreator';
 import PageBuilder from './pages/PageBuilder';
@@ -7,8 +8,10 @@ import DatabaseManager from './pages/DatabaseManager';
 import RadioOps from './pages/RadioOps';
 import Browse from './pages/Browse';
 import Settings from './pages/Settings';
+import SetupPage from './pages/Setup';
 import InstallPrompt from './components/InstallPrompt/InstallPrompt';
 import { db } from './lib/database';
+import radioTheme from './theme/chakraTheme';
 import './App.css';
 
 function App() {
@@ -16,18 +19,39 @@ function App() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const [callsign, setCallsign] = useState('');
+  const [isSetupComplete, setIsSetupComplete] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
 
   useEffect(() => {
     // Initialize database
     db.init().then(() => {
       setDbReady(true);
-      // Load callsign from localStorage
-      const savedCallsign = localStorage.getItem('callsign');
-      if (savedCallsign) {
-        setCallsign(savedCallsign);
-      }
+
+      // Check setup completion status
+      const checkSetupStatus = () => {
+        const savedCallsign = localStorage.getItem('callsign');
+        const stationConfig = localStorage.getItem('stationConfig');
+        const stationCertificates = localStorage.getItem('stationCertificates');
+
+        const setupComplete = !!(
+          savedCallsign &&
+          stationConfig &&
+          stationCertificates &&
+          stationCertificates !== '[]'
+        );
+
+        setIsSetupComplete(setupComplete);
+        setIsCheckingSetup(false);
+
+        if (savedCallsign) {
+          setCallsign(savedCallsign);
+        }
+      };
+
+      checkSetupStatus();
     }).catch(err => {
       console.error('Failed to initialize database:', err);
+      setIsCheckingSetup(false);
     });
 
     // Handle online/offline status
@@ -60,17 +84,30 @@ function App() {
     };
   }, []);
 
-  if (!dbReady) {
+  // Handle setup completion
+  const handleSetupComplete = (config: any) => {
+    setCallsign(config.callsign);
+    setIsSetupComplete(true);
+  };
+
+  if (!dbReady || isCheckingSetup) {
     return (
       <div className="app">
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-400">Initializing database...</p>
+            <p className="text-gray-400">
+              {!dbReady ? 'Initializing database...' : 'Checking setup status...'}
+            </p>
           </div>
         </div>
       </div>
     );
+  }
+
+  // If setup is not complete, show setup page
+  if (!isSetupComplete) {
+    return <SetupPage onSetupComplete={handleSetupComplete} />;
   }
 
   return (
@@ -148,6 +185,14 @@ function App() {
                   Settings
                 </NavLink>
               </li>
+              <li>
+                <NavLink
+                  to="/setup"
+                  className={({ isActive }) => isActive ? 'bg-gray-700 text-blue-400' : ''}
+                >
+                  Setup
+                </NavLink>
+              </li>
             </ul>
           </nav>
         </header>
@@ -161,6 +206,7 @@ function App() {
             <Route path="/radio" element={<RadioOps />} />
             <Route path="/browse" element={<Browse />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/setup" element={<SetupPage onSetupComplete={handleSetupComplete} forceSetup={true} />} />
           </Routes>
         </main>
         

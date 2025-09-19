@@ -146,50 +146,72 @@ describe('SDR Device Connection Integration Tests', () => {
 
   describe('Device Connection', () => {
     it('should connect to RTL-SDR device via WebUSB', async () => {
+      // Setup navigator.usb mock
+      Object.defineProperty(navigator, 'usb', {
+        value: mockNavigatorUSB,
+        writable: true
+      });
+
+      mockNavigatorUSB.getDevices.mockResolvedValue([mockUSBDevice]);
       mockNavigatorUSB.requestDevice.mockResolvedValue(mockUSBDevice);
       mockUSBDevice.open.mockResolvedValue();
       mockUSBDevice.selectConfiguration.mockResolvedValue();
       mockUSBDevice.claimInterface.mockResolvedValue();
 
-      mockSDRDeviceManager.connectDevice.mockResolvedValue({
-        id: 'rtl-sdr-001',
-        type: 'RTL_SDR',
-        connectionStatus: 'CONNECTED',
-        device: mockUSBDevice
-      });
+      const { SDRDeviceManager } = await import('../../lib/sdr-support/sdr-device-manager/index.js');
+      const deviceManager = new SDRDeviceManager();
 
-      // const { SDRDeviceManager } = await import('../../src/lib/sdr-support/sdr-device-manager');
-      const deviceManager = mockSDRDeviceManager;
+      await deviceManager.initialize();
 
-      const connectedDevice = await deviceManager.connectDevice('RTL_SDR');
+      // Request device first
+      const device = await deviceManager.requestDevice(['RTL_SDR']);
 
-      expect(connectedDevice.connectionStatus).toBe('CONNECTED');
+      // Then connect to it
+      const connected = await deviceManager.connectDevice(device.id);
+
+      expect(connected).toBe(true);
       expect(mockUSBDevice.open).toHaveBeenCalled();
       expect(mockUSBDevice.claimInterface).toHaveBeenCalled();
     });
 
     it('should handle WebUSB permission denied gracefully', async () => {
-      const permissionError = new Error('User cancelled the requestDevice() chooser');
-      permissionError.name = 'NotFoundError';
+      Object.defineProperty(navigator, 'usb', {
+        value: mockNavigatorUSB,
+        writable: true
+      });
 
+      const permissionError = new DOMException('User cancelled the requestDevice() chooser', 'NotAllowedError');
+      mockNavigatorUSB.getDevices.mockResolvedValue([]);
       mockNavigatorUSB.requestDevice.mockRejectedValue(permissionError);
 
-      // const { SDRDeviceManager } = await import('../../src/lib/sdr-support/sdr-device-manager');
-      const deviceManager = mockSDRDeviceManager;
+      const { SDRDeviceManager } = await import('../../lib/sdr-support/sdr-device-manager/index.js');
+      const deviceManager = new SDRDeviceManager();
 
-      await expect(deviceManager.connectDevice('RTL_SDR'))
-        .rejects.toThrow('User cancelled the requestDevice() chooser');
+      await deviceManager.initialize();
+
+      await expect(deviceManager.requestDevice(['RTL_SDR']))
+        .rejects.toThrow('Permission denied by user');
     });
 
     it('should handle device communication errors', async () => {
+      Object.defineProperty(navigator, 'usb', {
+        value: mockNavigatorUSB,
+        writable: true
+      });
+
+      mockNavigatorUSB.getDevices.mockResolvedValue([]);
       mockNavigatorUSB.requestDevice.mockResolvedValue(mockUSBDevice);
       mockUSBDevice.open.mockRejectedValue(new Error('Device communication failed'));
 
-      // const { SDRDeviceManager } = await import('../../src/lib/sdr-support/sdr-device-manager');
-      const deviceManager = mockSDRDeviceManager;
+      const { SDRDeviceManager } = await import('../../lib/sdr-support/sdr-device-manager/index.js');
+      const deviceManager = new SDRDeviceManager();
 
-      await expect(deviceManager.connectDevice('RTL_SDR'))
-        .rejects.toThrow('Device communication failed');
+      await deviceManager.initialize();
+
+      const device = await deviceManager.requestDevice(['RTL_SDR']);
+
+      await expect(deviceManager.connectDevice(device.id))
+        .rejects.toThrow('Failed to connect to device: Device communication failed');
     });
 
     it('should validate device type before connection', async () => {

@@ -172,48 +172,113 @@ const DraggableComponentView: React.FC<DraggableComponentProps> = ({
     MozUserSelect: 'none'
   };
 
-  const renderChildComponent = (child: PageComponent, index: number) => {
+  const renderChildComponent = (child: PageComponent, index: number, depth: number = 1) => {
     const { type, properties } = child;
+    const indentClass = depth > 1 ? `ml-${Math.min(depth - 1, 4) * 2}` : '';
+    const depthIndicator = depth > 1 ? `[L${depth}]` : '';
 
-    switch (type) {
-      case ComponentType.HEADING:
-        return <h3 key={child.id} className="text-lg font-bold mb-2">{properties.content || 'Heading'}</h3>;
-      case ComponentType.PARAGRAPH:
-        return <p key={child.id} className="mb-2">{properties.content || 'Paragraph text'}</p>;
-      case ComponentType.TEXT:
-        return <span key={child.id} className="block mb-1">{properties.content || 'Text'}</span>;
-      case ComponentType.BUTTON:
-        return (
-          <button key={child.id} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded mr-2 mb-2">
-            {properties.content || 'Button'}
-          </button>
-        );
-      case ComponentType.LINK:
-        return (
-          <a key={child.id} href={properties.href || '#'} className="text-blue-400 hover:underline mr-2 mb-2 inline-block">
-            {properties.content || 'Link'}
-          </a>
-        );
-      case ComponentType.INPUT:
-        return (
-          <input
-            key={child.id}
-            type={properties.type || 'text'}
-            placeholder={properties.placeholder || 'Input'}
-            className="px-2 py-1 bg-gray-800 border border-gray-600 rounded mr-2 mb-2 block w-full"
-          />
-        );
-      case ComponentType.DIVIDER:
-        return <hr key={child.id} className="border-gray-600 my-2" />;
-      case ComponentType.MARKDOWN:
-        return (
-          <pre key={child.id} className="mb-2 p-2 bg-gray-800 rounded text-xs font-mono whitespace-pre-wrap">
-            {properties.content || 'Markdown content'}
-          </pre>
-        );
-      default:
-        return <div key={child.id} className="mb-2">{properties.content || 'Component'}</div>;
+    const baseElement = (() => {
+      switch (type) {
+        case ComponentType.HEADING:
+          return (
+            <h3 key={child.id} className={`text-lg font-bold mb-2 ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Heading'}
+            </h3>
+          );
+        case ComponentType.PARAGRAPH:
+          return (
+            <p key={child.id} className={`mb-2 ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Paragraph text'}
+            </p>
+          );
+        case ComponentType.TEXT:
+          return (
+            <span key={child.id} className={`block mb-1 ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Text'}
+            </span>
+          );
+        case ComponentType.BUTTON:
+          return (
+            <button key={child.id} className={`px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded mr-2 mb-2 ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Button'}
+            </button>
+          );
+        case ComponentType.LINK:
+          return (
+            <a key={child.id} href={properties.href || '#'} className={`text-blue-400 hover:underline mr-2 mb-2 inline-block ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Link'}
+            </a>
+          );
+        case ComponentType.INPUT:
+          return (
+            <div key={child.id} className={`mb-2 ${indentClass}`}>
+              {depthIndicator && <div className="text-xs text-gray-400 mb-1">{depthIndicator} Input</div>}
+              <input
+                type={properties.type || 'text'}
+                placeholder={properties.placeholder || 'Input'}
+                className="px-2 py-1 bg-gray-800 border border-gray-600 rounded w-full"
+              />
+            </div>
+          );
+        case ComponentType.DIVIDER:
+          return (
+            <div key={child.id} className={`my-2 ${indentClass}`}>
+              {depthIndicator && <div className="text-xs text-gray-400 mb-1">{depthIndicator} Divider</div>}
+              <hr className="border-gray-600" />
+            </div>
+          );
+        case ComponentType.CONTAINER:
+          return (
+            <div key={child.id} className={`p-2 border border-gray-600 rounded mb-2 bg-gray-800/20 ${indentClass}`}>
+              <div className="text-xs text-gray-400 mb-1">
+                {depthIndicator} Container ({(child.children || []).length} children)
+              </div>
+              {child.children && child.children.length > 0 ? (
+                <div className="space-y-1">
+                  {child.children.map((grandchild, grandIndex) =>
+                    renderChildComponent(grandchild, grandIndex, depth + 1)
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 italic">Empty container</div>
+              )}
+            </div>
+          );
+        case ComponentType.MARKDOWN:
+          return (
+            <div key={child.id} className={`mb-2 ${indentClass}`}>
+              {depthIndicator && <div className="text-xs text-gray-400 mb-1">{depthIndicator} Markdown</div>}
+              <pre className="p-2 bg-gray-800 rounded text-xs font-mono whitespace-pre-wrap">
+                {properties.content || 'Markdown content'}
+              </pre>
+            </div>
+          );
+        default:
+          return (
+            <div key={child.id} className={`mb-2 ${indentClass}`}>
+              {depthIndicator && <span className="text-xs text-gray-400 mr-1">{depthIndicator}</span>}
+              {properties.content || 'Component'}
+            </div>
+          );
+      }
+    })();
+
+    // Wrap with additional nesting indicators for deep nesting
+    if (depth > 2) {
+      return (
+        <div key={child.id} className="relative">
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-blue-500/50 to-transparent"></div>
+          <div className="pl-2">{baseElement}</div>
+        </div>
+      );
     }
+
+    return baseElement;
   };
 
   const renderComponentContent = () => {
@@ -257,65 +322,113 @@ const DraggableComponentView: React.FC<DraggableComponentProps> = ({
         return <hr className="border-gray-600" />;
       case ComponentType.FORM:
         return (
-          <div className="p-4 border border-gray-600 rounded min-h-20">
+          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gradient-to-br from-blue-900/10 to-purple-900/10">
             {children && children.length > 0 ? (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400 mb-2">Form</div>
-                {children.map((child, index) => renderChildComponent(child, index))}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-gray-400">🔖 Form</div>
+                  <div className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+                    {children.length} field{children.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="space-y-2 pl-2 border-l-2 border-blue-500/30">
+                  {children.map((child, index) => renderChildComponent(child, index, 1))}
+                </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-400 text-center py-4">
-                Form Container - Add children via Properties panel
+              <div className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-600 rounded">
+                <div className="mb-2">📝</div>
+                <div>Form Container</div>
+                <div className="text-xs mt-1">Add form fields via Properties panel</div>
               </div>
             )}
           </div>
         );
       case ComponentType.TABLE:
         return (
-          <div className="p-4 border border-gray-600 rounded min-h-20">
+          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gradient-to-br from-green-900/10 to-blue-900/10">
             {children && children.length > 0 ? (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400 mb-2">Table</div>
-                {children.map((child, index) => renderChildComponent(child, index))}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-gray-400">📊 Table</div>
+                  <div className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+                    {children.length} row{children.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="space-y-1 pl-2 border-l-2 border-green-500/30">
+                  {children.map((child, index) => renderChildComponent(child, index, 1))}
+                </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-400 text-center py-4">
-                Table - Add children via Properties panel
+              <div className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-600 rounded">
+                <div className="mb-2">📊</div>
+                <div>Table Structure</div>
+                <div className="text-xs mt-1">Add table rows via Properties panel</div>
               </div>
             )}
           </div>
         );
       case ComponentType.LIST:
         return (
-          <div className="p-4 border border-gray-600 rounded min-h-20">
+          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gradient-to-br from-purple-900/10 to-pink-900/10">
             {children && children.length > 0 ? (
-              <ul className="space-y-1">
-                <div className="text-xs text-gray-400 mb-2">List</div>
-                {children.map((child, index) => (
-                  <li key={child.id} className="flex items-center">
-                    <span className="mr-2">•</span>
-                    {renderChildComponent(child, index)}
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-gray-400">📋 List</div>
+                  <div className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+                    {children.length} item{children.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <ul className="space-y-1 pl-2 border-l-2 border-purple-500/30">
+                  {children.map((child, index) => (
+                    <li key={child.id} className="flex items-start space-x-2">
+                      <span className="text-purple-400 mt-1 text-xs">•</span>
+                      <div className="flex-1">{renderChildComponent(child, index, 1)}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
-              <div className="text-sm text-gray-400 text-center py-4">
-                List - Add children via Properties panel
+              <div className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-600 rounded">
+                <div className="mb-2">📋</div>
+                <div>List Structure</div>
+                <div className="text-xs mt-1">Add list items via Properties panel</div>
               </div>
             )}
           </div>
         );
       case ComponentType.CONTAINER:
         return (
-          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gray-800/30">
+          <div className="p-4 border border-gray-600 rounded min-h-20 bg-gradient-to-br from-gray-800/30 to-gray-700/20 relative">
+            {/* Container depth indicator */}
+            <div className="absolute top-1 right-1 text-xs text-gray-500 bg-gray-800 px-1 rounded">
+              L1
+            </div>
+
             {children && children.length > 0 ? (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400 mb-2">Container ({children.length} children)</div>
-                {children.map((child, index) => renderChildComponent(child, index))}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-gray-400">📦 Container</div>
+                  <div className="flex items-center space-x-2">
+                    <div className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+                      {children.length} component{children.length !== 1 ? 's' : ''}
+                    </div>
+                    {children.some(child => child.children && child.children.length > 0) && (
+                      <div className="text-xs text-blue-400" title="Contains nested components">
+                        🔗
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2 pl-3 border-l-2 border-gray-500/30">
+                  {children.map((child, index) => renderChildComponent(child, index, 1))}
+                </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-600">
-                Container - Drop components here or add via Properties panel
+              <div className="text-sm text-gray-400 text-center py-6 border border-dashed border-gray-600 rounded">
+                <div className="mb-2">📦</div>
+                <div className="font-medium">Empty Container</div>
+                <div className="text-xs mt-1">Drop components here or add via Properties panel</div>
               </div>
             )}
           </div>

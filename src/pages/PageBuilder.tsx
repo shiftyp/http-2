@@ -30,6 +30,10 @@ import { GridCanvas } from '../components/PageBuilder/GridCanvas';
 import { ComponentPalette } from '../components/PageBuilder/ComponentPalette';
 import { PropertyEditor } from '../components/PageBuilder/PropertyEditor';
 import { PreviewPanel } from '../components/PageBuilder/PreviewPanel';
+import { CollaborationPanel, CollaborationUser, CollaborationState } from '../components/PageBuilder/CollaborationPanel';
+import RealtimeSync from '../lib/collaboration/RealtimeSync';
+import { RichMediaComponent, RichMediaProps } from '../components/PageBuilder/RichMedia';
+import MediaUploader from '../components/PageBuilder/MediaUploader';
 
 // Markdown to HTML converter for preview
 const convertMarkdownToHTML = (markdown: string, baseStyle: string): string => {
@@ -257,7 +261,8 @@ export enum ComponentType {
   LIST = 'list',
   CONTAINER = 'container',
   DIVIDER = 'divider',
-  MARKDOWN = 'markdown'
+  MARKDOWN = 'markdown',
+  RICH_MEDIA = 'rich_media'
 }
 
 export interface GridPosition {
@@ -277,6 +282,7 @@ export interface ComponentProps {
   src?: string;
   alt?: string;
   type?: string;
+  richMedia?: RichMediaProps; // For rich media components
   [key: string]: any;
 }
 
@@ -343,6 +349,29 @@ const PageBuilder: React.FC = () => {
   const [ariaStatus, setAriaStatus] = useState<string>('');
   const modalRef = useRef<HTMLDivElement>(null);
 
+  // Collaboration state
+  const [collaborationEnabled, setCollaborationEnabled] = useState(false);
+  const [currentUser] = useState<CollaborationUser>({
+    id: crypto.randomUUID(),
+    callsign: localStorage.getItem('callsign') || 'NOCALL',
+    color: '#60a5fa',
+    isActive: true,
+    lastSeen: new Date(),
+    permissions: 'admin'
+  });
+  const [collaborationState, setCollaborationState] = useState<CollaborationState>({
+    sessionId: '',
+    users: [currentUser],
+    isConnected: false,
+    conflicts: []
+  });
+  const [realtimeSync, setRealtimeSync] = useState<RealtimeSync | null>(null);
+
+  // Rich media state
+  const [showMediaUploader, setShowMediaUploader] = useState(false);
+  const [transmissionMode, setTransmissionMode] = useState<'rf' | 'webrtc' | 'hybrid'>('hybrid');
+  const bandwidthLimit = transmissionMode === 'rf' ? 2048 : 1024 * 1024; // 2KB for RF, 1MB for WebRTC
+
   const gridRef = useRef<HTMLDivElement>(null);
   // React renderer for component-to-radio conversion with bandwidth optimization
   const compressor = new HamRadioCompressor();
@@ -397,6 +426,62 @@ const PageBuilder: React.FC = () => {
     })
   );
 
+  // Initialize collaboration when enabled
+  useEffect(() => {
+    if (collaborationEnabled && !realtimeSync) {
+      const sessionId = crypto.randomUUID();
+      const sync = new RealtimeSync(sessionId, currentUser);
+
+      // Set up event listeners
+      sync.on('connected', (data) => {
+        setCollaborationState(prev => ({
+          ...prev,
+          sessionId: data.sessionId,
+          isConnected: true
+        }));
+      });
+
+      sync.on('user-joined', (user) => {
+        setCollaborationState(prev => ({
+          ...prev,
+          users: [...prev.users.filter(u => u.id !== user.id), user]
+        }));
+      });
+
+      sync.on('user-left', (user) => {
+        setCollaborationState(prev => ({
+          ...prev,
+          users: prev.users.filter(u => u.id !== user.id)
+        }));
+      });
+
+      sync.on('state-changed', (data) => {
+        setComponents(data.components);
+        setCollaborationState(prev => ({
+          ...prev,
+          users: data.users,
+          conflicts: sync.getCollaborationState().conflicts
+        }));
+      });
+
+      sync.on('operation-applied', (operation) => {
+        // Update components from remote operations
+        setComponents(sync.getComponents());
+      });
+
+      // Initialize with current components
+      sync.initialize(components);
+      setRealtimeSync(sync);
+    }
+
+    return () => {
+      if (realtimeSync && !collaborationEnabled) {
+        realtimeSync.dispose();
+        setRealtimeSync(null);
+      }
+    };
+  }, [collaborationEnabled, components, currentUser, realtimeSync]);
+
 
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
@@ -442,25 +527,32 @@ const PageBuilder: React.FC = () => {
           }
         }
       };
-      setComponents([...components, newComponent]);
+      const updatedComponents = [...components, newComponent];
+      setComponents(updatedComponents);
+
+      // Sync with collaboration if enabled
+      if (realtimeSync && collaborationEnabled) {
+        realtimeSync.addComponent(newComponent);
+      }
     }
     // Handle component reposition
     else {
       const draggedComponent = components.find(c => c.id === active.id);
       if (draggedComponent && over.data.current?.gridPosition) {
+        const newGridArea = {
+          ...over.data.current.gridPosition,
+          rowSpan: draggedComponent.gridArea.rowSpan,
+          colSpan: draggedComponent.gridArea.colSpan
+        };
         const updatedComponents = components.map(c =>
-          c.id === active.id
-            ? {
-                ...c,
-                gridArea: {
-                  ...over.data.current.gridPosition,
-                  rowSpan: c.gridArea.rowSpan,
-                  colSpan: c.gridArea.colSpan
-                }
-              }
-            : c
+          c.id === active.id ? { ...c, gridArea: newGridArea } : c
         );
         setComponents(updatedComponents);
+
+        // Sync with collaboration if enabled
+        if (realtimeSync && collaborationEnabled) {
+          realtimeSync.moveComponent(active.id as string, newGridArea);
+        }
       }
     }
 
@@ -483,6 +575,8 @@ const PageBuilder: React.FC = () => {
         return { placeholder: 'Enter text...', type: 'text' };
       case ComponentType.IMAGE:
         return { alt: 'Image', src: '/placeholder.jpg' };
+      case ComponentType.RICH_MEDIA:
+        return { richMedia: null }; // Will be set when media is processed
       default:
         return {};
     }
@@ -617,9 +711,94 @@ const PageBuilder: React.FC = () => {
   // Update component properties
   const updateComponent = (id: string, updates: Partial<PageComponent>) => {
     saveUndoState();
-    setComponents(components.map(c =>
+    const updatedComponents = components.map(c =>
       c.id === id ? { ...c, ...updates } : c
-    ));
+    );
+    setComponents(updatedComponents);
+
+    // Sync with collaboration if enabled
+    if (realtimeSync && collaborationEnabled) {
+      const component = updatedComponents.find(c => c.id === id);
+      if (component) {
+        realtimeSync.updateComponent(id, updates);
+      }
+    }
+  };
+
+  // Collaboration event handlers
+  const handleUserInvite = async (callsign: string) => {
+    if (!realtimeSync) return;
+
+    // In a real implementation, this would send an invitation
+    // For now, we'll simulate adding a user
+    const newUser: CollaborationUser = {
+      id: crypto.randomUUID(),
+      callsign: callsign.toUpperCase(),
+      color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
+      isActive: true,
+      lastSeen: new Date(),
+      permissions: 'edit'
+    };
+
+    realtimeSync.addUser(newUser);
+  };
+
+  const handlePermissionChange = (userId: string, permission: CollaborationUser['permissions']) => {
+    setCollaborationState(prev => ({
+      ...prev,
+      users: prev.users.map(user =>
+        user.id === userId ? { ...user, permissions: permission } : user
+      )
+    }));
+  };
+
+  const handleKickUser = (userId: string) => {
+    if (!realtimeSync) return;
+    realtimeSync.removeUser(userId);
+  };
+
+  const handleResolveConflict = (componentId: string, resolution: 'merge' | 'mine' | 'theirs') => {
+    // Find and resolve the conflict
+    setCollaborationState(prev => ({
+      ...prev,
+      conflicts: prev.conflicts.filter(c => c.componentId !== componentId)
+    }));
+
+    // In a real implementation, this would apply the resolution strategy
+    console.log(`Resolving conflict for ${componentId} with strategy: ${resolution}`);
+  };
+
+  // Handle media processing from uploader
+  const handleMediaProcessed = (media: RichMediaProps) => {
+    // Create a new rich media component
+    const newComponent: PageComponent = {
+      id: `component-${Date.now()}`,
+      type: ComponentType.RICH_MEDIA,
+      gridArea: findNextAvailablePosition(),
+      properties: { richMedia: media },
+      style: {
+        basic: {
+          fontSize: 'medium',
+          fontWeight: 'normal',
+          textAlign: 'left'
+        }
+      }
+    };
+
+    saveUndoState();
+    const updatedComponents = [...components, newComponent];
+    setComponents(updatedComponents);
+
+    // Sync with collaboration if enabled
+    if (realtimeSync && collaborationEnabled) {
+      realtimeSync.addComponent(newComponent);
+    }
+
+    // Close uploader
+    setShowMediaUploader(false);
+
+    // Select the new component for editing
+    setSelectedComponent(newComponent);
   };
 
   // Column management functions
@@ -707,9 +886,15 @@ const PageBuilder: React.FC = () => {
     }
 
     saveUndoState();
-    setComponents(components.filter(c => c.id !== id));
+    const updatedComponents = components.filter(c => c.id !== id);
+    setComponents(updatedComponents);
     setSelectedComponent(null);
     setAriaStatus(`${component.type} component deleted`);
+
+    // Sync with collaboration if enabled
+    if (realtimeSync && collaborationEnabled) {
+      realtimeSync.deleteComponent(id);
+    }
   };
 
   // Duplicate component
@@ -768,6 +953,22 @@ const PageBuilder: React.FC = () => {
           };
         case ComponentType.DIVIDER:
           return { type: 'divider', properties: { style: styleObj }, key };
+        case ComponentType.RICH_MEDIA:
+          // Rich media components are transmitted as compressed data
+          if (properties.richMedia) {
+            return {
+              type: 'media',
+              properties: {
+                mediaType: properties.richMedia.type,
+                codec: properties.richMedia.codec,
+                compressedSize: properties.richMedia.metadata.compressedSize,
+                fallback: properties.richMedia.fallbackContent,
+                style: styleObj
+              },
+              key
+            };
+          }
+          return null;
         case ComponentType.MARKDOWN:
           // Markdown component is for editing only - don't transmit over radio
           return null;
@@ -799,6 +1000,16 @@ const PageBuilder: React.FC = () => {
           return `<img src="${properties.src || ''}" alt="${properties.alt || ''}" style="${styleStr}" />`;
         case ComponentType.DIVIDER:
           return `<hr style="${styleStr}" />`;
+        case ComponentType.RICH_MEDIA:
+          // Rich media shows fallback content in HTML preview
+          if (properties.richMedia) {
+            return `<div style="${styleStr}" class="rich-media-preview">
+              <div class="media-info">[${properties.richMedia.type.toUpperCase()}]</div>
+              <div class="media-fallback">${properties.richMedia.fallbackContent || 'Rich Media Content'}</div>
+              <div class="media-meta">${properties.richMedia.codec} - ${(properties.richMedia.metadata.compressedSize / 1024).toFixed(1)}KB</div>
+            </div>`;
+          }
+          return `<div style="${styleStr}">Rich Media (Not Configured)</div>`;
         case ComponentType.MARKDOWN:
           // Markdown component shows converted content in preview
           return convertMarkdownToHTML(properties.content || '', styleStr);
@@ -1002,6 +1213,22 @@ const PageBuilder: React.FC = () => {
                   ✓ Validate
                 </Button>
                 <Button
+                  onClick={() => setCollaborationEnabled(!collaborationEnabled)}
+                  className={collaborationEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'}
+                  aria-label={collaborationEnabled ? 'Disable collaboration' : 'Enable collaboration'}
+                  title="Toggle Collaboration Mode"
+                >
+                  {collaborationEnabled ? '👥 Collaboration ON' : '👤 Collaboration OFF'}
+                </Button>
+                <Button
+                  onClick={() => setShowMediaUploader(true)}
+                  className="bg-purple-600 hover:bg-purple-700"
+                  aria-label="Upload rich media"
+                  title="Add Rich Media"
+                >
+                  🎬 Add Media
+                </Button>
+                <Button
                   onClick={savePage}
                   className="bg-green-600 hover:bg-green-700"
                   aria-label="Save current page"
@@ -1089,6 +1316,11 @@ const PageBuilder: React.FC = () => {
                 const newComponent = components[nextIndex];
                 setSelectedComponent(newComponent);
                 setAriaStatus(`Selected ${newComponent.type} component at row ${newComponent.gridArea.row}, column ${newComponent.gridArea.col}`);
+
+                // Update cursor position for collaboration
+                if (realtimeSync && collaborationEnabled) {
+                  realtimeSync.updateCursor(newComponent.gridArea.col * 100, newComponent.gridArea.row * 100, newComponent.id);
+                }
               }
 
               // Move selected component with Shift + Arrow keys
@@ -1290,8 +1522,40 @@ const PageBuilder: React.FC = () => {
                 </div>
               </details>
             </div>
+
+            {/* Transmission Mode Selector */}
+            <div className="absolute bottom-4 right-4 bg-surface border border-gray-700 rounded-lg p-3 shadow-lg">
+              <div className="text-xs text-gray-400 mb-2">Transmission Mode</div>
+              <select
+                value={transmissionMode}
+                onChange={(e) => setTransmissionMode(e.target.value as 'rf' | 'webrtc' | 'hybrid')}
+                className="text-xs bg-gray-700 border border-gray-600 rounded px-2 py-1"
+              >
+                <option value="rf">RF Mode (2KB limit)</option>
+                <option value="webrtc">WebRTC Mode (1MB limit)</option>
+                <option value="hybrid">Hybrid Mode (auto-switch)</option>
+              </select>
+            </div>
           </div>
         </main>
+
+        {/* Right Sidebar - Collaboration Panel */}
+        {collaborationEnabled && (
+          <aside
+            className="w-80 bg-surface border-l border-gray-700 overflow-y-auto"
+            role="complementary"
+            aria-label="Collaboration Panel"
+          >
+            <CollaborationPanel
+              collaborationState={collaborationState}
+              currentUser={currentUser}
+              onUserInvite={handleUserInvite}
+              onPermissionChange={handlePermissionChange}
+              onKickUser={handleKickUser}
+              onResolveConflict={handleResolveConflict}
+            />
+          </aside>
+        )}
 
         {/* Drag Overlay */}
         <DragOverlay>
@@ -1344,6 +1608,44 @@ const PageBuilder: React.FC = () => {
                 }}
                 onDuplicate={() => duplicateComponent(selectedComponent.id)}
                 onSelectChild={(child) => setSelectedComponent(child)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Uploader Modal */}
+      {showMediaUploader && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="media-uploader-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowMediaUploader(false);
+            }
+          }}
+        >
+          <div className="bg-surface border border-gray-700 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-surface border-b border-gray-700 p-4 flex items-center justify-between">
+              <h3 id="media-uploader-title" className="text-lg font-semibold">
+                Add Rich Media
+              </h3>
+              <button
+                onClick={() => setShowMediaUploader(false)}
+                className="text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded p-1"
+                aria-label="Close media uploader"
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <MediaUploader
+                onMediaProcessed={handleMediaProcessed}
+                bandwidthLimit={bandwidthLimit}
+                transmissionMode={transmissionMode}
               />
             </div>
           </div>

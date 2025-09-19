@@ -160,25 +160,22 @@ describe('Media Cache Persistence Contract', () => {
     });
 
     it('should assemble chunks on retrieval', async () => {
-      // Store chunks
-      await cache.storeChunk('/video.webm', 0, new Uint8Array([1, 2]), 0);
-      await cache.storeChunk('/video.webm', 1, new Uint8Array([3, 4]), 2);
-      await cache.storeChunk('/video.webm', 2, new Uint8Array([5, 6]), 4);
-      
-      // Mock chunk retrieval
+      // Mock chunk retrieval first, then store chunks
       const mockChunks = [
         { index: 0, offset: 0, length: 2, data: new Uint8Array([1, 2]) },
         { index: 1, offset: 2, length: 2, data: new Uint8Array([3, 4]) },
         { index: 2, offset: 4, length: 2, data: new Uint8Array([5, 6]) }
       ];
-      
+
       mockDb.transaction = vi.fn(() => ({
         objectStore: vi.fn((name: string) => {
           if (name === 'chunks') {
             return {
               index: vi.fn(() => ({
                 getAll: vi.fn(() => Promise.resolve(mockChunks))
-              }))
+              })),
+              put: vi.fn(() => Promise.resolve()),
+              add: vi.fn(() => Promise.resolve())
             };
           }
           return {
@@ -195,10 +192,17 @@ describe('Media Cache Persistence Contract', () => {
                 accessed: new Date(),
                 hits: 0
               }))
-            }))
+            })),
+            put: vi.fn(() => Promise.resolve()),
+            add: vi.fn(() => Promise.resolve())
           };
         })
       }));
+
+      // Store chunks
+      await cache.storeChunk('/video.webm', 0, new Uint8Array([1, 2]), 0);
+      await cache.storeChunk('/video.webm', 1, new Uint8Array([3, 4]), 2);
+      await cache.storeChunk('/video.webm', 2, new Uint8Array([5, 6]), 4);
       
       const cached = await cache.get('/video.webm');
       

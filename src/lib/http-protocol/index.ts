@@ -1,5 +1,8 @@
 import { QPSKModem } from '../qpsk-modem';
 import { HamRadioCompressor } from '../compression';
+import { DistributedSystemsManager } from '../distributed-systems/index.js';
+import { ComplianceManager } from '../fcc-compliance/index.js';
+import { PriorityManager, EmergencyBroadcaster, PriorityLevel, type PriorityMessage } from '../priority-tiers/index.js';
 
 export interface HTTPRequest {
   method: string;
@@ -250,8 +253,18 @@ export class HTTPProtocol {
   private radio: any;
   private meshNetwork: any;
   private responseHandlers: Map<number, { resolve: (response: any) => void; reject: (error: any) => void }> = new Map();
+  private distributedSystems?: DistributedSystemsManager;
+  private complianceManager?: ComplianceManager;
+  private emergencyBroadcaster?: EmergencyBroadcaster;
 
-  constructor(options: { callsign: string; compressor?: HamRadioCompressor; crypto?: any; modemConfig?: any }) {
+  constructor(options: {
+    callsign: string;
+    compressor?: HamRadioCompressor;
+    crypto?: any;
+    modemConfig?: any;
+    licenseClass?: 'NOVICE' | 'TECHNICIAN' | 'GENERAL' | 'ADVANCED' | 'EXTRA';
+    emergencyMode?: boolean;
+  }) {
     this.callsign = options.callsign;
     this.compressor = options.compressor || new HamRadioCompressor();
     this.crypto = options.crypto;
@@ -270,6 +283,394 @@ export class HTTPProtocol {
         fftSize: 2048
       });
     }
+
+    // Initialize distributed systems if callsign is provided
+    if (options.callsign) {
+      this.distributedSystems = new DistributedSystemsManager({
+        callsign: options.callsign,
+        licenseClass: options.licenseClass || 'TECHNICIAN',
+        emergencyMode: options.emergencyMode || false
+      });
+    }
+  }
+
+  /**
+   * Initialize distributed systems and FCC compliance
+   */
+  async initialize(): Promise<void> {
+    if (this.distributedSystems) {
+      await this.distributedSystems.initialize();
+      this.complianceManager = this.distributedSystems.complianceManager;
+
+      // Set up compliance violation handler
+      this.complianceManager.on('violation', (violation: any) => {
+        console.warn('FCC compliance violation detected:', violation);
+        // Implement automatic corrective action if needed
+      });
+
+      // Set up automatic shutdown handler
+      this.complianceManager.on('emergency-shutdown', () => {
+        console.error('Emergency shutdown initiated due to compliance violation');
+        this.emergencyShutdown();
+      });
+
+      // Initialize emergency broadcaster
+      this.emergencyBroadcaster = new EmergencyBroadcaster(
+        // Broadcast handler
+        async (message: PriorityMessage, config) => {
+          console.log(`Broadcasting ${PriorityManager.getPriorityName(message.priority.level)} message:`, message.id);
+
+          // Check FCC compliance for emergency override
+          if (message.priority.override && this.complianceManager) {
+            const overrideCheck = await this.complianceManager.checkEmergencyOverride({
+              data: new TextEncoder().encode(JSON.stringify(message.content)),
+              priority: message.priority.level,
+              source: message.priority.source
+            });
+
+            if (!overrideCheck.allowed) {
+              console.warn('Emergency override blocked by FCC compliance:', overrideCheck.reason);
+              return false;
+            }
+          }
+
+          // Create HTTP packet for broadcast
+          const packet = this.createPacket('REQUEST', {
+            method: 'POST',
+            path: '/emergency-broadcast',
+            headers: {
+              'X-Priority': message.priority.level.toString(),
+              'X-Emergency': message.priority.level <= PriorityLevel.P1_URGENT ? 'true' : 'false',
+              'X-Message-ID': message.id,
+              'X-Source': message.priority.source,
+              'Content-Type': 'application/json'
+            },
+            body: message.content
+          }, 'BROADCAST');
+
+          // Transmit via distributed systems or direct radio
+          try {
+            await this.transmitPacket(packet);
+            return true;
+          } catch (error) {
+            console.error('Emergency broadcast failed:', error);
+            return false;
+          }
+        },
+
+        // Emergency override handler
+        async (message: PriorityMessage) => {
+          console.warn('🚨 EMERGENCY OVERRIDE ACTIVATED 🚨');
+          console.log('Emergency message:', message.content);
+
+          // Trigger emergency protocols
+          if (this.complianceManager) {
+            await this.complianceManager.triggerEmergencyMode();
+          }
+
+          // Additional emergency actions can be added here
+        }
+      );
+    }
+  }
+
+  /**
+   * Emergency shutdown of all systems
+   */
+  async emergencyShutdown(): Promise<void> {
+    if (this.emergencyBroadcaster) {
+      this.emergencyBroadcaster.dispose();
+    }
+
+    if (this.distributedSystems) {
+      await this.distributedSystems.emergencyShutdown();
+    }
+
+    // Stop modem
+    if (this.modem) {
+      this.modem.stop();
+    }
+
+    // Clear all handlers
+    this.requestHandler = undefined;
+    this.responseHandlers.clear();
+  }
+
+  /**
+   * Get distributed systems statistics
+   */
+  async getSystemStatistics(): Promise<any> {
+    if (this.distributedSystems) {
+      return await this.distributedSystems.getSystemStatistics();
+    }
+    return null;
+  }
+
+  /**
+   * Check FCC compliance status
+   */
+  getComplianceStatus(): any {
+    if (this.complianceManager) {
+      return this.complianceManager.getStatus();
+    }
+    return { compliant: false, reason: 'Compliance manager not initialized' };
+  }
+
+  /**
+   * Request and validate client certificate
+   */
+  async requestClientCertificate(callsign: string): Promise<boolean> {
+    if (!this.distributedSystems) {
+      return false;
+    }
+
+    try {
+      // Check if we already have a valid certificate
+      const existing = await this.distributedSystems.certificateManager.store.findByCallsign(callsign);
+      if (existing && existing.length > 0) {
+        const cert = existing[0];
+        const validation = await this.distributedSystems.certificateManager.service.validateCertificate(cert.certificate);
+        if (validation.valid) {
+          return true;
+        }
+      }
+
+      // Generate certificate request with CAPTCHA
+      const captcha = await this.distributedSystems.certificateManager.captcha.generate({
+        complexity: 5,
+        includeAudio: false
+      });
+
+      // Store pending request
+      await this.distributedSystems.certificateManager.store.storeCertificateRequest({
+        id: crypto.randomUUID(),
+        callsign,
+        timestamp: Date.now(),
+        status: 'pending',
+        captcha: captcha.challenge,
+        requestData: {
+          subject: { CN: callsign },
+          subjectAltName: [`callsign:${callsign}`],
+          keyUsage: ['digitalSignature', 'keyEncipherment'],
+          extendedKeyUsage: ['clientAuth']
+        }
+      });
+
+      console.log('Certificate request created for', callsign);
+      return false; // Not yet available, request created
+    } catch (error) {
+      console.error('Failed to request client certificate:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Authenticate connection using certificate
+   */
+  async authenticateConnection(callsign: string, certificate?: any): Promise<boolean> {
+    if (!this.distributedSystems) {
+      return false;
+    }
+
+    try {
+      if (!certificate) {
+        // Try to find existing certificate
+        const certs = await this.distributedSystems.certificateManager.store.findByCallsign(callsign);
+        if (certs.length === 0) {
+          return await this.requestClientCertificate(callsign);
+        }
+        certificate = certs[0].certificate;
+      }
+
+      // Validate certificate
+      const validation = await this.distributedSystems.certificateManager.service.validateCertificate(certificate);
+      if (!validation.valid) {
+        console.warn('Certificate validation failed:', validation.errors);
+        return false;
+      }
+
+      // Validate trust chain
+      const trustResult = await this.distributedSystems.certificateManager.validator.validateTrustChain(certificate);
+      if (!trustResult.valid) {
+        console.warn('Trust chain validation failed:', trustResult.errors);
+        return false;
+      }
+
+      console.log('Certificate authentication successful for', callsign);
+      return true;
+    } catch (error) {
+      console.error('Certificate authentication failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Broadcast emergency message
+   */
+  async broadcastEmergency(content: string, options: {
+    category?: string;
+    priority?: PriorityLevel;
+    override?: boolean;
+  } = {}): Promise<string | null> {
+    if (!this.emergencyBroadcaster) {
+      throw new Error('Emergency broadcaster not initialized');
+    }
+
+    const message = PriorityManager.createMessage(content, {
+      level: options.priority || PriorityLevel.P0_EMERGENCY,
+      category: options.category || 'emergency',
+      source: this.callsign,
+      broadcast: true,
+      override: options.override || true
+    });
+
+    await this.emergencyBroadcaster.queueBroadcast(message);
+    return message.id;
+  }
+
+  /**
+   * Create priority update for distribution
+   */
+  async createPriorityUpdate(content: any, options: {
+    priority: PriorityLevel;
+    category: string;
+    subscribers?: string[];
+    ttl?: number;
+  }): Promise<string | null> {
+    if (!this.distributedSystems) {
+      throw new Error('Distributed systems not initialized');
+    }
+
+    try {
+      // Create priority message
+      const message = PriorityManager.createMessage(content, {
+        level: options.priority,
+        category: options.category,
+        source: this.callsign,
+        ttl: options.ttl,
+        broadcast: options.priority <= PriorityLevel.P2_HIGH
+      });
+
+      // Store in update manager
+      const contentData = new TextEncoder().encode(JSON.stringify(content));
+      const update = await this.distributedSystems.updateManager.create({
+        category: options.category,
+        priority: options.priority,
+        data: contentData,
+        originator: this.callsign,
+        subscribers: options.subscribers || [],
+        compress: true
+      });
+
+      // Queue for emergency broadcast if high priority
+      if (this.emergencyBroadcaster && message.priority.broadcast) {
+        await this.emergencyBroadcaster.queueBroadcast(message);
+      }
+
+      return update.id;
+    } catch (error) {
+      console.error('Failed to create priority update:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Acknowledge emergency broadcast receipt
+   */
+  acknowledgeEmergencyBroadcast(messageId: string): void {
+    if (this.emergencyBroadcaster) {
+      this.emergencyBroadcaster.acknowledgeMessage(messageId, this.callsign);
+    }
+  }
+
+  /**
+   * Get emergency broadcast statistics
+   */
+  getEmergencyStatistics(): any {
+    if (this.emergencyBroadcaster) {
+      return this.emergencyBroadcaster.getStatistics();
+    }
+    return {
+      pendingBroadcasts: 0,
+      emergencyMessages: 0,
+      urgentMessages: 0,
+      totalAttempts: 0,
+      acknowledgedMessages: 0
+    };
+  }
+
+  /**
+   * Subscribe to dynamic updates
+   */
+  async subscribe(options: {
+    categories: string[];
+    priorities: number[];
+    keywords?: string[];
+    maxSize?: number;
+    ttl?: number;
+  }): Promise<string | null> {
+    if (!this.distributedSystems) {
+      throw new Error('Distributed systems not initialized');
+    }
+
+    try {
+      const subscription = await this.distributedSystems.subscriptionRegistry.create({
+        callsign: this.callsign,
+        categories: options.categories,
+        priorities: options.priorities,
+        keywords: options.keywords,
+        maxSize: options.maxSize,
+        ttl: options.ttl,
+        delivery: {
+          queueSize: 50,
+          retryCount: 3,
+          retryDelayMs: 2000
+        }
+      });
+
+      return subscription.id;
+    } catch (error) {
+      console.error('Failed to create subscription:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Unsubscribe from updates
+   */
+  async unsubscribe(subscriptionId: string): Promise<boolean> {
+    if (!this.distributedSystems) {
+      return false;
+    }
+
+    try {
+      await this.distributedSystems.subscriptionRegistry.delete(subscriptionId);
+      return true;
+    } catch (error) {
+      console.error('Failed to unsubscribe:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get distributed servers status
+   */
+  getServerStatus(): any {
+    if (!this.distributedSystems) {
+      return { connected: false, servers: [] };
+    }
+
+    const connections = this.distributedSystems.serverManager.getActiveConnections();
+    return {
+      connected: connections.length > 0,
+      servers: connections.map(conn => ({
+        id: conn.server.id,
+        endpoint: conn.server.endpoint,
+        status: conn.status,
+        responseTime: conn.responseTime,
+        messageCount: conn.messageCount
+      }))
+    };
   }
 
   createPacket(type: 'REQUEST' | 'RESPONSE' | 'DELTA' | 'STREAM', payload: HTTPRequest | HTTPResponse, destination: string): HTTPPacket {
@@ -381,33 +782,11 @@ export class HTTPProtocol {
     };
 
     if (useProtocolBuffers && body) {
-      // Protocol buffer mode: send schema first, then encoded data
-      const schema = protocolBuffers.generateSchema(body, 'RequestData');
-      const schemaTransmission = protocolBuffers.createSchemaTransmission(schema);
-
-      // Send schema packet first
-      const schemaPayload = new TextEncoder().encode(JSON.stringify(schemaTransmission));
-      const schemaPacket: HTTPPacket = {
-        version: 1,
-        type: 'schema',
-        id: this.generatePacketId(),
-        sequence: this.sequenceNumber++,
-        flags: {
-          compressed: false,
-          encrypted: false,
-          fragmented: false,
-          lastFragment: true,
-          deltaUpdate: false,
-          protobufEncoded: true
-        },
-        payload: schemaPayload
-      };
-
-      await this.transmitPacket(schemaPacket);
-
-      // Encode the data using protocol buffers
-      const encoded = protocolBuffers.encode(body, schema.id);
-      const encodedPayload = encoded.data; // Use raw binary data
+      // JSON compression mode: compress the body directly
+      const compressor = new HamRadioCompressor();
+      const jsonString = JSON.stringify(body);
+      const compressedData = await compressor.compress(jsonString);
+      const encodedPayload = compressedData;
 
       // Send data packet
       const dataPacket: HTTPPacket = {
@@ -416,12 +795,12 @@ export class HTTPProtocol {
         id: this.generatePacketId(),
         sequence: this.sequenceNumber++,
         flags: {
-          compressed: false,
+          compressed: true,
           encrypted: false,
           fragmented: false,
           lastFragment: true,
           deltaUpdate: false,
-          protobufEncoded: true
+          protobufEncoded: false
         },
         payload: encodedPayload
       };
@@ -534,14 +913,40 @@ export class HTTPProtocol {
   }
 
   private async transmitPacket(packet: HTTPPacket): Promise<void> {
+    // Check FCC compliance before transmission
+    if (this.complianceManager) {
+      const complianceCheck = await this.complianceManager.checkTransmission({
+        data: packet.payload,
+        destination: packet.header?.destination || 'BROADCAST',
+        type: packet.type
+      });
+
+      if (!complianceCheck.allowed) {
+        throw new Error(`Transmission blocked by FCC compliance: ${complianceCheck.reason}`);
+      }
+    }
+
     const serialized = this.serializePacket(packet);
-    
-    // Fragment if too large
+
+    // Try distributed transmission first
+    if (this.distributedSystems && packet.header?.destination) {
+      try {
+        await this.distributedSystems.serverManager.sendMessage(
+          { packet: Array.from(serialized) },
+          { strategy: 'best-response-time' }
+        );
+        return;
+      } catch (error) {
+        console.warn('Distributed transmission failed, falling back to direct radio:', error);
+      }
+    }
+
+    // Fallback to direct radio transmission
     const maxPayloadSize = 2048; // bytes per transmission
-    
+
     if (serialized.length > maxPayloadSize) {
       const fragments = this.fragmentPacket(serialized, maxPayloadSize);
-      
+
       for (let i = 0; i < fragments.length; i++) {
         const fragPacket: HTTPPacket = {
           ...packet,
@@ -553,9 +958,9 @@ export class HTTPProtocol {
           },
           payload: fragments[i]
         };
-        
+
         await this.modem.transmit(this.serializePacket(fragPacket));
-        
+
         // Wait for ACK or timeout
         await this.waitForAck(fragPacket.id, fragPacket.sequence);
       }
@@ -640,17 +1045,10 @@ export class HTTPProtocol {
     this.modem.startReceive((data) => {
       const packet = this.deserializePacket(data);
 
-      // Handle schema packets - cache but don't forward to application
-      if (packet.type === 'schema' && packet.flags.protobufEncoded) {
-        try {
-          const schemaTransmission = JSON.parse(new TextDecoder().decode(packet.payload));
-          if (schemaTransmission.schema) {
-            protocolBuffers.cacheSchema(schemaTransmission.schema);
-          }
-        } catch (error) {
-          console.warn('Failed to parse schema packet:', error);
-        }
-        return; // Don't forward schema packets to application
+      // Handle schema packets - no longer needed since we use direct JSON compression
+      if (packet.type === 'schema') {
+        // Schema packets are no longer used, skip them
+        return;
       }
 
       if (packet.flags.fragmented) {
@@ -781,7 +1179,7 @@ export class HTTPProtocol {
     return payload;
   }
 
-  decodePacket(data: Uint8Array): any {
+  async decodePacket(data: Uint8Array): Promise<any> {
     // Handle empty data
     if (!data || data.length === 0) {
       return undefined;
@@ -795,31 +1193,15 @@ export class HTTPProtocol {
       // Fallback to standard packet deserialization
       const packet = this.deserializePacket(data);
       if (packet.payload) {
-        // Handle protocol buffer encoded data with raw binary
-        if (packet.flags.protobufEncoded && packet.type !== 'schema') {
+        // Handle compressed JSON data
+        if (packet.flags.compressed && packet.type !== 'schema') {
           try {
-            // For binary protobuf data, we need to reconstruct the EncodedMessage
-            // Since we sent raw binary data, we need to get the schema ID from context
-            // For now, let's try to decode all cached schemas until one works
-            const schemaIds = protocolBuffers.getCachedSchemaIds();
-
-            for (const schemaId of schemaIds) {
-              try {
-                const encodedMessage = {
-                  schemaId: schemaId,
-                  data: packet.payload,
-                  compressed: false
-                };
-                const decoded = protocolBuffers.decode(encodedMessage);
-                return decoded;
-              } catch {
-                continue; // Try next schema
-              }
-            }
-
-            return { error: 'Protocol buffer decode failed: no matching schema found' };
+            // Decompress the data using HamRadioCompressor
+            const compressor = new HamRadioCompressor();
+            const decompressedString = await compressor.decompress(packet.payload);
+            return JSON.parse(decompressedString);
           } catch (error) {
-            return { error: `Protocol buffer decode failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+            return { error: `JSON decompression failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
           }
         }
 
@@ -910,49 +1292,26 @@ export class HTTPProtocol {
     };
 
     if (useProtocolBuffers && body) {
-      // Protocol buffer mode: send schema first, then encoded data
-      const schema = protocolBuffers.generateSchema(body, 'RequestData');
-      const schemaTransmission = protocolBuffers.createSchemaTransmission(schema);
+      // JSON compression mode: compress the body directly
+      const compressor = new HamRadioCompressor();
+      const jsonString = JSON.stringify(body);
+      const compressedData = await compressor.compress(jsonString);
 
-      // Send schema packet first
-      const schemaPayload = new TextEncoder().encode(JSON.stringify(schemaTransmission));
-      const schemaPacket: HTTPPacket = {
-        version: 1,
-        type: 'schema',
-        id: this.generatePacketId(),
-        sequence: this.sequenceNumber++,
-        flags: {
-          compressed: false,
-          encrypted: false,
-          fragmented: false,
-          lastFragment: true,
-          deltaUpdate: false,
-          protobufEncoded: false
-        },
-        payload: schemaPayload
-      };
-
-      // Transmit schema
-      await this.transmitPacket(schemaPacket);
-
-      // Encode the actual data
-      const encodedData = protocolBuffers.encode(body, schema.id);
-
-      // Create packet with the raw binary data
+      // Create packet with compressed data
       const dataPacket: HTTPPacket = {
         version: 1,
         type: 'request',
         id: this.generatePacketId(),
         sequence: this.sequenceNumber++,
         flags: {
-          compressed: false,
+          compressed: true,
           encrypted: false,
           fragmented: false,
           lastFragment: true,
           deltaUpdate: false,
-          protobufEncoded: true
+          protobufEncoded: false
         },
-        payload: encodedData.data // Already binary
+        payload: compressedData
       };
 
       await this.transmitPacket(dataPacket);
