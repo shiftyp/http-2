@@ -1,0 +1,96 @@
+{
+  "mcpTools": {
+    "description": "Domain-specific context and knowledge for amateur radio development",
+    "domainKnowledge": {
+      "enabled": true,
+      "contexts": [
+        {
+          "name": "amateur-radio-regulations",
+          "description": "FCC Part 97 regulations and amateur radio band plans",
+          "context": {
+            "regulations": "FCC Part 97",
+            "bandPlans": {
+              "80m": "3.5-4.0 MHz",
+              "40m": "7.0-7.3 MHz",
+              "20m": "14.0-14.35 MHz",
+              "17m": "18.068-18.168 MHz",
+              "15m": "21.0-21.45 MHz",
+              "12m": "24.89-24.99 MHz",
+              "10m": "28.0-29.7 MHz"
+            },
+            "digitalModes": {
+              "qpsk": "2.8kHz max bandwidth",
+              "psk31": "31.25 Hz bandwidth",
+              "ft8": "50 Hz bandwidth"
+            },
+            "powerLimits": {
+              "novice": "200W PEP",
+              "general": "1500W PEP",
+              "extra": "1500W PEP"
+            }
+          }
+        },
+        {
+          "name": "radio-protocols",
+          "description": "Digital radio protocol specifications and parameters",
+          "context": {
+            "qpsk": {
+              "symbolRates": [31.25, 62.5, 125, 250, 500, 1000, 2400, 4800, 9600],
+              "bandwidthLimit": "2.8kHz",
+              "modulation": "Quadrature Phase Shift Keying"
+            },
+            "ofdm": {
+              "subcarriers": 48,
+              "targetBandwidth": "100kHz+",
+              "throughput": "100+ kbps"
+            },
+            "mesh": {
+              "protocol": "AODV",
+              "routing": "Ad-hoc On-demand Distance Vector",
+              "hopLimit": 16
+            }
+          }
+        },
+        {
+          "name": "project-specifications",
+          "description": "Project-specific specification knowledge and development history",
+          "context": {
+            "developmentHistory": {
+              "previousAI": "Claude AI (Anthropic)",
+              "methodology": "Specification-driven development with custom spec kit",
+              "approach": "Phase-based development (Research → Design → Tasks → Implementation → Testing)",
+              "qualityStandards": "TDD, 70%+ test coverage, FCC Part 97 compliance",
+              "architecturalDecisions": "PWA-first, offline-capable, bandwidth-optimized"
+            },
+            "totalSpecs": 26,
+            "activeDevelopment": ["028-chakra-ui", "027-automatic-shutdown", "026-dynamic-data"],
+            "completionTracking": {
+              "totalTasks": 1434,
+              "completed": 56,
+              "percentage": "3.9%"
+            },
+            "priorities": {
+              "critical": ["028-chakra-ui", "027-automatic-shutdown"],
+              "high": ["026-dynamic-data", "009-enhanced-page-builder"],
+              "medium": ["023-ofdm", "025-fcc-compliance-implementation"]
+            }
+          }
+        }
+      ]
+    },
+    "codeContext": {
+      "enabled": true,
+      "patterns": {
+        "radioLibraries": "src/lib/**/",
+        "specifications": "specs/**/",
+        "components": "src/components/**/",
+        "protocols": "src/lib/{qpsk-modem,ofdm,mesh-networking}/**/"
+      }
+    }
+  },
+  "configuration": {
+    "contextAware": true,
+    "specificationDriven": true,
+    "domainExpertise": "amateur-radio"
+  }
+}

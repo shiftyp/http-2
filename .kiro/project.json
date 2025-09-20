@@ -1,0 +1,69 @@
+{
+  "project": {
+    "name": "HTTP-over-Ham-Radio",
+    "type": "amateur-radio-pwa",
+    "domain": "amateur-radio-communication",
+    "technologies": [
+      "TypeScript",
+      "React",
+      "Vite",
+      "Chakra UI",
+      "Web Audio API",
+      "WebRTC",
+      "WebUSB",
+      "Web Serial API",
+      "IndexedDB",
+      "Service Workers"
+    ]
+  },
+  "specifications": {
+    "total": 26,
+    "completed": 56,
+    "totalTasks": 1434,
+    "completionRate": "3.9%",
+    "priority": [
+      "001-web-based-application",
+      "023-ofdm",
+      "025-fcc-compliance-implementation",
+      "027-automatic-shutdown",
+      "009-enhanced-page-builder",
+      "014-webrtc-transmission-mode",
+      "013-bit-torrent-protocol",
+      "020-certificate-management"
+    ],
+    "categories": {
+      "ui": ["028-chakra-ui", "009-enhanced-page-builder", "006-visual-page-builder"],
+      "compliance": ["027-automatic-shutdown", "025-fcc-compliance-implementation"],
+      "protocols": ["023-ofdm", "014-webrtc-transmission-mode", "013-bit-torrent-protocol"],
+      "infrastructure": ["021-pwa-server", "020-certificate-management", "019-server-cq-storage"],
+      "visualization": ["007-waterfall-snr-power", "008-mesh-network-visualization"],
+      "hardware": ["015-sdr-support", "016-unlicensed-mode"]
+    }
+  },
+  "domain": {
+    "regulations": "FCC Part 97",
+    "bandwidthLimits": {
+      "hf": "2.8kHz",
+      "vhf": "broader",
+      "uhf": "broader"
+    },
+    "modulation": {
+      "primary": "QPSK",
+      "highSpeed": "OFDM",
+      "fallback": "PSK31"
+    },
+    "frequencies": {
+      "hf": "3-30MHz",
+      "vhf": "30-300MHz",
+      "uhf": "300MHz-3GHz"
+    }
+  },
+  "architecture": {
+    "frontend": "React PWA",
+    "backend": "Native WebSocket signaling server",
+    "protocols": "HTTP/1.1 over QPSK/OFDM",
+    "storage": "IndexedDB",
+    "offline": "Service Workers",
+    "p2p": "WebRTC + RF hybrid"
+  }
+}

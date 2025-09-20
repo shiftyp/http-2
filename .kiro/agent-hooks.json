@@ -1,0 +1,165 @@
+{
+  "agentHooks": {
+    "enabled": true,
+    "description": "Agent hooks for spec-based development and FCC compliance validation",
+    "hooks": {
+      "preCommit": {
+        "enabled": true,
+        "hooks": [
+          {
+            "name": "spec-validation",
+            "description": "Validate changes against specification requirements",
+            "command": "npm run test:contract",
+            "failOnError": true,
+            "timeout": 60000
+          },
+          {
+            "name": "fcc-compliance-check",
+            "description": "Check for FCC Part 97 compliance violations",
+            "script": ".kiro/validators/fcc-compliance.js",
+            "failOnError": true,
+            "rules": [
+              "no-encryption-in-rf-mode",
+              "station-identification-required",
+              "bandwidth-limits-enforced",
+              "automatic-control-compliance"
+            ]
+          },
+          {
+            "name": "bandwidth-validation",
+            "description": "Validate bandwidth requirements for ham radio constraints",
+            "script": ".kiro/validators/bandwidth-validator.js",
+            "thresholds": {
+              "pageSize": "2KB",
+              "compressionRatio": 0.3,
+              "transmissionTime": "30s"
+            }
+          }
+        ]
+      },
+      "onFileChange": {
+        "enabled": true,
+        "hooks": [
+          {
+            "name": "auto-spec-update",
+            "description": "Update specification progress when files change",
+            "patterns": ["src/**/*.ts", "src/**/*.tsx"],
+            "script": ".kiro/scripts/update-spec-progress.js"
+          },
+          {
+            "name": "protocol-validation",
+            "description": "Validate radio protocol implementations",
+            "patterns": ["src/lib/qpsk-modem/**/*.ts", "src/lib/ofdm/**/*.ts"],
+            "script": ".kiro/validators/protocol-validator.js"
+          }
+        ]
+      },
+      "postTest": {
+        "enabled": true,
+        "hooks": [
+          {
+            "name": "coverage-update",
+            "description": "Update test coverage tracking for specifications",
+            "command": "npm run test:coverage",
+            "script": ".kiro/scripts/update-coverage.js"
+          },
+          {
+            "name": "spec-completion-tracker",
+            "description": "Track specification completion based on test results",
+            "script": ".kiro/scripts/track-spec-completion.js"
+          }
+        ]
+      },
+      "onSpecChange": {
+        "enabled": true,
+        "hooks": [
+          {
+            "name": "task-sync",
+            "description": "Sync task changes with specification files",
+            "patterns": ["specs/*/tasks.md"],
+            "script": ".kiro/scripts/sync-spec-tasks.js"
+          },
+          {
+            "name": "priority-update",
+            "description": "Update development priorities based on spec changes",
+            "script": ".kiro/scripts/update-priorities.js"
+          }
+        ]
+      },
+      "preBuild": {
+        "enabled": true,
+        "hooks": [
+          {
+            "name": "compression-check",
+            "description": "Validate compression ratios for radio transmission",
+            "script": ".kiro/validators/compression-validator.js",
+            "targets": {
+              "pages": "2KB",
+              "assets": "optimized",
+              "bundle": "minimized"
+            }
+          },
+          {
+            "name": "pwa-manifest-validation",
+            "description": "Validate PWA manifest for amateur radio use",
+            "script": ".kiro/validators/pwa-validator.js"
+          }
+        ]
+      }
+    }
+  },
+  "validation": {
+    "fccCompliance": {
+      "enabled": true,
+      "rules": {
+        "encryptionProhibited": {
+          "description": "Content encryption prohibited in RF mode",
+          "severity": "error",
+          "patterns": ["encrypt", "cipher", "AES", "RSA"],
+          "exclusions": ["signature", "hash", "ECDSA", "ECDH"]
+        },
+        "stationIdentification": {
+          "description": "Station identification required every 10 minutes",
+          "severity": "warning",
+          "minInterval": 600,
+          "automaticEnabled": true
+        },
+        "bandwidthLimits": {
+          "description": "Emissions must not exceed necessary bandwidth",
+          "severity": "error",
+          "hfLimit": "2.8kHz",
+          "vhfLimit": "broader",
+          "uhfLimit": "broader"
+        },
+        "automaticControl": {
+          "description": "Automatic stations require control operator",
+          "severity": "error",
+          "requirements": ["authentication", "timeout", "shutdown"]
+        }
+      }
+    },
+    "protocolCompliance": {
+      "enabled": true,
+      "qpsk": {
+        "symbolRateRange": [31.25, 9600],
+        "bandwidthMax": 2800,
+        "modulationDepth": [2, 4]
+      },
+      "ofdm": {
+        "subcarriers": 48,
+        "guardInterval": [0.0625, 0.25],
+        "bandwidthTarget": 100000
+      },
+      "mesh": {
+        "routingProtocol": "AODV",
+        "hopLimit": 16,
+        "identificationRequired": true
+      }
+    }
+  },
+  "scripts": {
+    "basePath": ".kiro/scripts",
+    "validatorsPath": ".kiro/validators",
+    "templatesPath": ".kiro/templates"
+  }
+}

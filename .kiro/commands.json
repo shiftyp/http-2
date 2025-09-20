@@ -1,0 +1,85 @@
+{
+  "commands": {
+    "description": "Custom commands for spec-driven development and ham radio protocols",
+    "categories": {
+      "development": [
+        {
+          "name": "spec-status",
+          "description": "Show current specification development status",
+          "command": "node .kiro/scripts/spec-status.js",
+          "shortcut": "Cmd+Shift+S"
+        },
+        {
+          "name": "create-spec-component",
+          "description": "Create a new component following specification guidelines",
+          "command": "node .kiro/scripts/create-spec-component.js",
+          "prompt": "componentName specNumber",
+          "template": ".kiro/templates/spec-component.template"
+        },
+        {
+          "name": "validate-fcc-compliance",
+          "description": "Validate current code against FCC Part 97 regulations",
+          "command": "node .kiro/validators/fcc-compliance.js",
+          "shortcut": "Cmd+Shift+F"
+        }
+      ],
+      "testing": [
+        {
+          "name": "test-radio-protocols",
+          "description": "Run tests specifically for radio protocol implementations",
+          "command": "npm test -- --testPathPattern='(qpsk|ofdm|mesh)'",
+          "shortcut": "Cmd+Shift+R"
+        },
+        {
+          "name": "test-spec-contracts",
+          "description": "Run contract tests for specifications",
+          "command": "npm run test:integration",
+          "shortcut": "Cmd+Shift+C"
+        },
+        {
+          "name": "bandwidth-test",
+          "description": "Test bandwidth optimization for ham radio constraints",
+          "command": "node .kiro/scripts/bandwidth-test.js"
+        }
+      ],
+      "protocols": [
+        {
+          "name": "qpsk-analyzer",
+          "description": "Analyze QPSK modulation parameters",
+          "command": "node .kiro/scripts/qpsk-analyzer.js",
+          "parameters": ["symbolRate", "bandwidth"]
+        },
+        {
+          "name": "ofdm-calculator",
+          "description": "Calculate OFDM subcarrier parameters",
+          "command": "node .kiro/scripts/ofdm-calculator.js",
+          "parameters": ["subcarriers", "bandwidth", "throughput"]
+        },
+        {
+          "name": "mesh-simulator",
+          "description": "Simulate mesh network topology",
+          "command": "node .kiro/scripts/mesh-simulator.js"
+        }
+      ],
+      "build": [
+        {
+          "name": "build-radio-optimized",
+          "description": "Build with radio transmission optimizations",
+          "command": "npm run build && node .kiro/scripts/optimize-for-radio.js"
+        },
+        {
+          "name": "generate-spec-report",
+          "description": "Generate comprehensive specification progress report",
+          "command": "node .kiro/scripts/generate-spec-report.js",
+          "output": "spec-progress-report.md"
+        }
+      ]
+    },
+    "shortcuts": {
+      "Cmd+Shift+S": "spec-status",
+      "Cmd+Shift+F": "validate-fcc-compliance",
+      "Cmd+Shift+R": "test-radio-protocols",
+      "Cmd+Shift+C": "test-spec-contracts"
+    }
+  }
+}

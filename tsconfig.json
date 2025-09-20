@@ -35,7 +35,9 @@
       "@lib/band-manager/*": ["src/lib/band-manager/*"],
       "@pages/*": ["src/pages/*"],
       "@types/*": ["src/types/*"],
-      "@workers/*": ["src/workers/*"]
+      "@workers/*": ["src/workers/*"],
+      "@specs/*": ["specs/*"],
+      "@kiro/*": [".kiro/*"]
     }
   },
   "include": ["src"],

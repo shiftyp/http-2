@@ -1,0 +1,270 @@
+{
+  "name": "HTTP-over-Ham-Radio",
+  "description": "Progressive Web Application for HTTP communication over WebRTC and amateur radio networks",
+  "version": "0.1.0",
+  "domain": "amateur-radio",
+  "workspace": {
+    "type": "typescript-react-pwa",
+    "framework": "vite",
+    "testFramework": "vitest",
+    "packageManager": "npm",
+    "previousDevelopment": {
+      "aiAssistant": "Claude AI (Anthropic)",
+      "methodology": "specification-driven development with spec kit",
+      "approach": "phase-based development with contract testing",
+      "standards": "TDD, FCC compliance, bandwidth optimization"
+    }
+  },
+  "settings": {
+    "autoSave": true,
+    "formatOnSave": true,
+    "lintOnSave": true,
+    "enableSpecValidation": true,
+    "enableFccCompliance": true,
+    "bandwidthOptimization": true
+  },
+  "features": {
+    "specDrivenDevelopment": {
+      "enabled": true,
+      "specsDirectory": "specs",
+      "totalSpecs": 26,
+      "activeSpecs": 18,
+      "progressTracking": true,
+      "taskTracking": {
+        "totalTasks": 1434,
+        "completedTasks": 56,
+        "completionRate": "3.9%"
+      },
+      "priorities": [
+        "028-chakra-ui",
+        "027-automatic-shutdown",
+        "026-dynamic-data",
+        "009-enhanced-page-builder"
+      ]
+    },
+    "hamRadioIntegration": {
+      "enabled": true,
+      "protocols": {
+        "primary": "QPSK",
+        "highSpeed": "OFDM",
+        "fallback": "WebRTC",
+        "modes": ["HTTP-1000", "HTTP-2400", "HTTP-9600", "HTTP-11200"]
+      },
+      "fccCompliance": {
+        "enabled": true,
+        "part97": true,
+        "encryptionBlocking": true,
+        "stationId": {
+          "interval": 600,
+          "automatic": true
+        },
+        "automaticControl": {
+          "enabled": true,
+          "remoteShutdown": true,
+          "controlOperator": true
+        }
+      },
+      "frequencies": {
+        "hf": "3-30MHz",
+        "vhf": "30-300MHz",
+        "uhf": "300MHz-3GHz"
+      },
+      "bandwidthLimits": {
+        "hf": "2.8kHz",
+        "digitalModes": "500Hz-2.8kHz",
+        "ofdm": "100kHz+"
+      },
+      "compressionRequired": true,
+      "targetPageSize": "2KB"
+    },
+    "visualPageBuilder": {
+      "enabled": true,
+      "dragDropSupport": true,
+      "realTimePreview": true,
+      "bandwidthFeedback": true,
+      "componentTypes": [
+        "TEXT", "HEADING", "PARAGRAPH", "IMAGE",
+        "FORM", "INPUT", "BUTTON", "LINK",
+        "TABLE", "LIST", "CONTAINER", "DIVIDER"
+      ],
+      "gridSystem": {
+        "enabled": true,
+        "snapToGrid": true,
+        "visualIndicators": true
+      },
+      "compression": {
+        "realTime": true,
+        "optimization": true,
+        "stats": true
+      }
+    },
+    "sdrIntegration": {
+      "enabled": true,
+      "devices": [
+        "RTL-SDR", "HackRF", "LimeSDR",
+        "PlutoSDR", "SDRplay"
+      ],
+      "wideBandMonitoring": true,
+      "spectrumAnalysis": true,
+      "waterfall": true
+    },
+    "meshNetworking": {
+      "enabled": true,
+      "protocol": "AODV",
+      "routing": "store-and-forward",
+      "visualization": true,
+      "multipath": true,
+      "topology": {
+        "realTime": true,
+        "propagation": true
+      }
+    },
+    "certificateManagement": {
+      "enabled": true,
+      "x509Support": true,
+      "amateurRadioExtensions": true,
+      "trustChains": true,
+      "distributedCA": true,
+      "revocation": "CRL"
+    },
+    "contentDistribution": {
+      "enabled": true,
+      "bitTorrentStyle": true,
+      "parallelTransmission": true,
+      "chunking": true,
+      "ofdmSubcarriers": 48,
+      "cqRouting": true
+    },
+    "webrtcTransmission": {
+      "enabled": true,
+      "hybridMode": true,
+      "automaticFallback": true,
+      "peerToPeer": true,
+      "signalingServer": true,
+      "localNetwork": "1MB/s"
+    },
+    "pwaTechnology": {
+      "enabled": true,
+      "offlineCapabilities": true,
+      "serviceWorkers": true,
+      "caching": {
+        "api": true,
+        "assets": true,
+        "dynamic": true
+      },
+      "manifest": true,
+      "installable": true
+    },
+    "webAssembly": {
+      "enabled": true,
+      "description": "WebAssembly integration for high-performance processing",
+      "applications": [
+        "SDR signal processing",
+        "FFT processing for OFDM",
+        "Media codec optimization",
+        "Real-time compression",
+        "Neural network acceleration"
+      ],
+      "libraries": ["mozjpeg", "libwebp", "opus-encoder", "fft-js"],
+      "simdAcceleration": true
+    },
+    "webWorkers": {
+      "enabled": true,
+      "description": "Background processing with Web Workers",
+      "workers": [
+        "modem.worker.ts",
+        "ofdm-processor.ts",
+        "chunk-analyzer.worker.ts",
+        "spectrum-analyzer.worker.ts",
+        "webrtc-coordinator.worker.ts",
+        "transfer-worker.js",
+        "optimizer.worker.ts",
+        "function.worker.ts",
+        "server-app.worker.ts",
+        "crypto.worker.ts"
+      ],
+      "backgroundProcessing": true,
+      "sandboxedExecution": true
+    },
+    "webAPIs": {
+      "enabled": true,
+      "description": "Modern Web API integration",
+      "apis": [
+        "Web Serial API",
+        "Web Audio API",
+        "WebUSB API",
+        "Web Crypto API",
+        "IndexedDB",
+        "WebRTC",
+        "Service Workers",
+        "Canvas API",
+        "WebAssembly"
+      ],
+      "offlineFirst": true,
+      "hardwareAccess": true
+    },
+    "mediaProcessing": {
+      "enabled": true,
+      "description": "Rich media processing with size constraints",
+      "maxFileSize": "100KB",
+      "supportedFormats": [
+        "JPEG (mozjpeg WASM)",
+        "WebP (libwebp WASM)",
+        "Opus audio (opus-encoder WASM)",
+        "YAML/UTF-8 serialization"
+      ],
+      "compressionRequired": true,
+      "ofdmTransmission": true
+    },
+    "sandboxing": {
+      "enabled": true,
+      "description": "Secure execution environments",
+      "serverAppSandbox": true,
+      "functionSandbox": true,
+      "isolatedExecution": true,
+      "securityPolicies": true
+    },
+    "testing": {
+      "enabled": true,
+      "frameworks": ["vitest", "playwright"],
+      "types": ["unit", "integration", "e2e", "contract"],
+      "coverage": {
+        "target": 70,
+        "current": "70.2%"
+      },
+      "mockInfrastructure": true,
+      "hardwareSimulation": true,
+      "protocolTesting": true,
+      "performanceBenchmarking": true
+    },
+    "modernUI": {
+      "enabled": true,
+      "framework": "Chakra UI",
+      "version": "3.27.0",
+      "theme": "radio-operator-dark",
+      "migration": {
+        "from": "Tailwind CSS",
+        "to": "Chakra UI",
+        "preserveTheme": true
+      },
+      "accessibility": true,
+      "responsiveDesign": true
+    }
+  },
+  "paths": {
+    "src": "src",
+    "lib": "src/lib",
+    "components": "src/components",
+    "pages": "src/pages",
+    "specs": "specs",
+    "tests": "tests"
+  },
+  "commands": {
+    "dev": "npm run dev",
+    "build": "npm run build",
+    "test": "npm test",
+    "typecheck": "npm run typecheck",
+    "lint": "npm run lint",
+    "spec-validate": "npm run test:contract"
+  }
+}

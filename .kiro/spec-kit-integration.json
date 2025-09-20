@@ -1,0 +1,238 @@
+{
+  "specKitIntegration": {
+    "enabled": true,
+    "description": "Direct integration with spec kit for seamless Kiro IDE workflow",
+    "specDirectory": "specs",
+    "filePatterns": {
+      "planFile": "plan.md",
+      "tasksFile": "tasks.md",
+      "contractsDirectory": "contracts",
+      "dataModelFile": "data-model.md",
+      "quickstartFile": "quickstart.md",
+      "researchFile": "research.md"
+    }
+  },
+  "workflows": {
+    "specDevelopment": {
+      "enabled": true,
+      "autoDetectSpec": true,
+      "taskTracking": {
+        "parseTasksFromMarkdown": true,
+        "completionPattern": "^\\s*-\\s*\\[x\\]",
+        "pendingPattern": "^\\s*-\\s*\\[ \\]",
+        "inProgressPattern": "^\\s*-\\s*\\[~\\]",
+        "updateOnSave": true,
+        "realTimeSync": true,
+        "gitCommitIntegration": true,
+        "sectionTracking": {
+          "enabled": true,
+          "sections": [
+            "Essential Tasks",
+            "Priority Tasks",
+            "Development Tasks",
+            "Testing Tasks",
+            "Documentation Tasks"
+          ]
+        }
+      },
+      "planningStages": {
+        "enabled": true,
+        "description": "Track and integrate planning stages across specifications",
+        "stages": {
+          "phase0": {
+            "name": "Research",
+            "file": "research.md",
+            "description": "Research phase with technical investigation",
+            "autoDetect": true
+          },
+          "phase1": {
+            "name": "Design",
+            "files": ["contracts/", "data-model.md", "quickstart.md"],
+            "description": "Design phase with contracts and data models",
+            "autoDetect": true
+          },
+          "phase2": {
+            "name": "Task Planning",
+            "file": "tasks.md",
+            "description": "Task generation and planning",
+            "autoDetect": true
+          },
+          "phase3": {
+            "name": "Implementation",
+            "pattern": "src/**/*.ts",
+            "description": "Active implementation phase",
+            "autoDetect": true
+          },
+          "phase4": {
+            "name": "Testing",
+            "pattern": "**/*.test.ts",
+            "description": "Testing and validation phase",
+            "autoDetect": true
+          }
+        },
+        "stageTransitions": {
+          "autoDetect": true,
+          "notifyOnTransition": true,
+          "updateContext": true
+        }
+      },
+      "planValidation": {
+        "requiredSections": ["Overview", "Implementation", "Testing"],
+        "validateOnChange": true
+      }
+    },
+    "contractTesting": {
+      "enabled": true,
+      "autoRunOnChange": true,
+      "contractFilePattern": "specs/*/contracts/*.test.ts",
+      "integrationCommand": "npm run test:contract"
+    },
+    "progressReporting": {
+      "enabled": true,
+      "generateReports": true,
+      "updateFrequency": "on-change",
+      "outputFormat": "markdown"
+    }
+  },
+  "fileWatchers": {
+    "specFiles": {
+      "patterns": [
+        "specs/*/plan.md",
+        "specs/*/tasks.md",
+        "specs/*/data-model.md"
+      ],
+      "actions": [
+        "updateSpecStatus",
+        "recalculateProgress",
+        "validateCompliance"
+      ]
+    },
+    "contractFiles": {
+      "patterns": [
+        "specs/*/contracts/*.ts",
+        "specs/*/contracts/*.test.ts"
+      ],
+      "actions": [
+        "runContractTests",
+        "updateTestCoverage"
+      ]
+    },
+    "implementationFiles": {
+      "patterns": [
+        "src/lib/**/*.ts",
+        "src/components/**/*.tsx"
+      ],
+      "actions": [
+        "linkToSpecs",
+        "checkImplementationProgress"
+      ]
+    }
+  },
+  "specStatusTracking": {
+    "statusEnum": [
+      "not-planned",
+      "planning",
+      "ready",
+      "in-progress",
+      "testing",
+      "completed",
+      "superseded"
+    ],
+    "progressCalculation": {
+      "method": "task-completion",
+      "weightByPriority": true,
+      "includeContractTests": true
+    },
+    "automatedUpdates": {
+      "taskCompletion": true,
+      "testResults": true,
+      "codeChanges": true
+    }
+  },
+  "specNavigation": {
+    "enabled": true,
+    "quickJump": {
+      "command": "kiro.jumpToSpec",
+      "shortcut": "Cmd+Shift+G",
+      "fuzzySearch": true
+    },
+    "sidebar": {
+      "showProgress": true,
+      "groupByCategory": true,
+      "filterByStatus": true
+    },
+    "breadcrumbs": {
+      "showCurrentSpec": true,
+      "showRelatedSpecs": true
+    }
+  },
+  "contextAwareAssistance": {
+    "enabled": true,
+    "specContext": {
+      "autoDetectCurrentSpec": true,
+      "loadRelatedContext": true,
+      "includeConstraints": true
+    },
+    "domainKnowledge": {
+      "amateurRadio": true,
+      "fccRegulations": true,
+      "protocolSpecs": true
+    },
+    "codeGeneration": {
+      "useSpecTemplates": true,
+      "enforceConstraints": true,
+      "includeCompliance": true
+    }
+  },
+  "interoperability": {
+    "taskManagement": {
+      "syncWithGitCommits": true,
+      "linkPRsToSpecs": true,
+      "trackImplementationTime": true
+    },
+    "testing": {
+      "mapTestsToSpecs": true,
+      "requireContractTests": true,
+      "trackCoverage": true
+    },
+    "documentation": {
+      "autoGenerateFromSpecs": true,
+      "keepInSync": true,
+      "validateCompleteness": true
+    }
+  },
+  "customCommands": {
+    "spec-create": {
+      "description": "Create new specification from template",
+      "command": "node .kiro/scripts/create-spec.js",
+      "parameters": ["specNumber", "title", "category"]
+    },
+    "spec-validate": {
+      "description": "Validate specification completeness",
+      "command": "node .kiro/scripts/validate-spec.js",
+      "parameters": ["specNumber"]
+    },
+    "spec-progress": {
+      "description": "Update specification progress",
+      "command": "node .kiro/scripts/update-spec-progress.js"
+    },
+    "spec-report": {
+      "description": "Generate comprehensive spec report",
+      "command": "node .kiro/scripts/generate-spec-report.js",
+      "output": "SPEC_PROGRESS.md"
+    }
+  },
+  "templates": {
+    "newSpec": {
+      "template": ".kiro/templates/new-spec.template",
+      "requiredFiles": ["plan.md", "tasks.md"],
+      "optionalFiles": ["data-model.md", "quickstart.md", "research.md"],
+      "contractsDirectory": true
+    },
+    "specComponent": {
+      "template": ".kiro/templates/spec-component.template",
+      "linkToSpec": true,
+      "includeTests": true
+    }
+  }
+}
