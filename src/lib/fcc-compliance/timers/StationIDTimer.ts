@@ -313,7 +313,7 @@ export class StationIDTimer {
   private initializeState(): StationIDTimerState {
     const now = new Date();
     return {
-      id: crypto.randomUUID(),
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
       callsign: this.config.callsign,
       lastIDTime: new Date(0), // Never transmitted
       nextIDTime: new Date(now.getTime() + this.config.intervalMinutes * 60 * 1000),

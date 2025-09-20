@@ -255,12 +255,11 @@ export class Database {
 
   async getQSOLog(options: { limit?: number; callsign?: string; frequency?: number } = {}): Promise<QSOEntry[]> {
     await this.ensureInitialized();
-    let qsos = await logbook.findQSOs();
 
-    // Apply filters
-    if (options.callsign) {
-      qsos = qsos.filter(qso => qso.callsign === options.callsign);
-    }
+    // Pass callsign to findQSOs if provided
+    let qsos = await logbook.findQSOs(options.callsign);
+
+    // Apply additional filters
     if (options.frequency) {
       qsos = qsos.filter(qso => qso.frequency === options.frequency);
     }
@@ -393,50 +392,20 @@ export class Database {
     await logbook.logQSO(qsoEntry);
   }
 
-  // Settings operations - store as pages with settings: prefix
+  // Settings operations - use logbook settings directly
   async saveSetting(key: string, value: any): Promise<void> {
     await this.ensureInitialized();
-    const settingEntry: PageEntry = {
-      path: `settings:${key}`,
-      title: `Setting: ${key}`,
-      content: JSON.stringify({ key, value, timestamp: Date.now() }),
-      lastUpdated: new Date().toISOString(),
-      author: 'system'
-    };
-    await logbook.savePage(settingEntry);
+    await logbook.saveSetting(key, value);
   }
 
   async getSetting(key: string, defaultValue?: any): Promise<any> {
     await this.ensureInitialized();
-    const setting = await logbook.getPage(`settings:${key}`);
-    if (!setting) return defaultValue;
-
-    try {
-      const parsed = JSON.parse(setting.content);
-      return parsed.value;
-    } catch {
-      return defaultValue;
-    }
+    return await logbook.getSetting(key, defaultValue);
   }
 
   async getAllSettings(): Promise<Record<string, any>> {
     await this.ensureInitialized();
-    const pages = await logbook.listPages();
-    const settings: Record<string, any> = {};
-
-    pages
-      .filter(page => page.path.startsWith('settings:'))
-      .forEach(page => {
-        try {
-          const parsed = JSON.parse(page.content);
-          const key = page.path.replace('settings:', '');
-          settings[key] = parsed.value;
-        } catch {
-          // Skip invalid settings
-        }
-      });
-
-    return settings;
+    return await logbook.getAllSettings();
   }
 
   async deleteSetting(key: string): Promise<void> {
@@ -445,17 +414,15 @@ export class Database {
     console.warn('Setting deletion not yet implemented');
   }
 
-  // Certificate operations - store as pages with cert: prefix
+  // Certificate operations - store as settings with cert: prefix
   async saveCertificate(cert: any): Promise<void> {
     await this.ensureInitialized();
-    const certEntry: PageEntry = {
-      path: `cert:${cert.callsign || cert.id}`,
-      title: `Certificate: ${cert.callsign}`,
-      content: JSON.stringify(cert),
-      lastUpdated: new Date().toISOString(),
-      author: cert.callsign
-    };
-    await logbook.savePage(certEntry);
+
+    // Cache the certificate
+    this.certificateCache.set(cert.callsign, cert);
+
+    // Save to logbook as a setting
+    await logbook.saveSetting(`cert:${cert.callsign}`, JSON.stringify(cert));
   }
 
   async getCertificate(callsign: string): Promise<any> {
@@ -466,49 +433,51 @@ export class Database {
       return this.certificateCache.get(callsign);
     }
 
-    const cert = await logbook.getPage(`cert:${callsign}`);
-    if (!cert) return null;
+    const certData = await logbook.getSetting(`cert:${callsign}`);
+    if (!certData) return null;
 
     try {
-      const parsed = JSON.parse(cert.content);
+      const parsed = JSON.parse(certData);
       this.certificateCache.set(callsign, parsed);
       return parsed;
     } catch {
-      return cert;
+      return certData;
     }
   }
 
   async getCertificateFromStorage(callsign: string): Promise<any> {
     await this.ensureInitialized();
-    const cert = await logbook.getPage(`cert:${callsign}`);
-    if (!cert) return null;
+    const certData = await logbook.getSetting(`cert:${callsign}`);
+    if (!certData) return null;
 
     try {
-      return JSON.parse(cert.content);
+      return JSON.parse(certData);
     } catch {
-      return cert;
+      return certData;
     }
   }
 
   async getValidCertificates(): Promise<any[]> {
     await this.ensureInitialized();
-    const pages = await logbook.listPages();
+    const settings = await logbook.getAllSettings();
     const now = Date.now();
+    const certificates: any[] = [];
 
-    return pages
-      .filter(page => page.path.startsWith('cert:'))
-      .map(page => {
+    // Get all certificate settings
+    for (const [key, value] of Object.entries(settings)) {
+      if (key.startsWith('cert:')) {
         try {
-          return JSON.parse(page.content);
+          const cert = JSON.parse(value as string);
+          if (!cert.expiresAt || new Date(cert.expiresAt).getTime() > now) {
+            certificates.push(cert);
+          }
         } catch {
-          return null;
+          // Skip invalid certificates
         }
-      })
-      .filter(cert => {
-        if (!cert) return false;
-        if (!cert.expiresAt) return true;
-        return new Date(cert.expiresAt).getTime() > now;
-      });
+      }
+    }
+
+    return certificates;
   }
 
   // Cache operations
@@ -587,7 +556,15 @@ export class Database {
   // QSO operations with filters
   async logQSO(qso: QSOEntry): Promise<void> {
     await this.ensureInitialized();
-    await logbook.logQSO(qso);
+
+    // Add default RST values if not provided
+    const qsoWithDefaults = {
+      ...qso,
+      rstSent: qso.rstSent || '59',
+      rstReceived: qso.rstReceived || '59'
+    };
+
+    await logbook.logQSO(qsoWithDefaults);
   }
 
   async getQSOLogWithFilters(filters: { callsign?: string; frequency?: number } = {}): Promise<QSOEntry[]> {
@@ -652,6 +629,16 @@ export class Database {
         await logbook.recordNode(node);
       }
     }
+  }
+
+  // Convenience method for tests - alias for saveSetting
+  async setSetting(key: string, value: any): Promise<void> {
+    return this.saveSetting(key, value);
+  }
+
+  // Clear cache method
+  async clearCache(maxAge?: number): Promise<void> {
+    await this.clearOldCache(maxAge);
   }
 
   close(): void {

@@ -209,14 +209,25 @@ beforeAll(() => {
       }
       return null;
     }),
-    transferControlToOffscreen: vi.fn(() => mockCanvas)
+    transferControlToOffscreen: vi.fn(() => mockCanvas),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn()
   };
 
   // Mock HTMLCanvasElement
-  global.HTMLCanvasElement = vi.fn().mockImplementation(() => mockCanvas);
+  Object.defineProperty(global, 'HTMLCanvasElement', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation(() => mockCanvas)
+  });
 
   // Mock OffscreenCanvas
-  global.OffscreenCanvas = vi.fn().mockImplementation(() => mockCanvas);
+  Object.defineProperty(global, 'OffscreenCanvas', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation(() => mockCanvas)
+  });
 
   // Mock document.createElement for canvas
   const originalCreateElement = document.createElement;

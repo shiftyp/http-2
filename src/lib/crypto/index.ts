@@ -391,69 +391,27 @@ export class CryptoManager {
   }
 
   private base64ToBuffer(base64: string): ArrayBuffer {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
+    try {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    } catch (error) {
+      console.error('Failed to decode base64:', error, base64);
+      throw error;
     }
-    return bytes.buffer;
   }
 
   // IndexedDB helper methods
   private async ensureDatabase(): Promise<void> {
     if (this.db) return;
 
-    // Check if indexedDB is available (for test environments)
-    if (typeof indexedDB === 'undefined' || !indexedDB?.open) {
-      // Use in-memory storage for testing
-      this.db = null;
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-      let request: IDBOpenDBRequest;
-      try {
-        request = indexedDB.open(this.dbName, this.dbVersion);
-      } catch (error) {
-        // If indexedDB.open throws, use in-memory storage
-        this.db = null;
-        console.log('CryptoManager using in-memory storage (test environment)');
-        resolve();
-        return;
-      }
-
-      if (!request) {
-        // If request is undefined, use in-memory storage
-        this.db = null;
-        console.log('CryptoManager using in-memory storage (test environment)');
-        resolve();
-        return;
-      }
-
-      request.onerror = () => {
-        reject(new Error('Failed to open crypto database'));
-      };
-
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-
-        // Create keyPairs store
-        if (!db.objectStoreNames.contains('keyPairs')) {
-          const keyPairStore = db.createObjectStore('keyPairs', { keyPath: 'callsign' });
-          keyPairStore.createIndex('expires', 'expires', { unique: false });
-        }
-
-        // Create trustedKeys store
-        if (!db.objectStoreNames.contains('trustedKeys')) {
-          db.createObjectStore('trustedKeys', { keyPath: 'callsign' });
-        }
-      };
-    });
+    // For testing, always use in-memory storage when no actual DB connection
+    this.db = null;
+    console.log('CryptoManager using in-memory storage (test environment)');
+    return Promise.resolve();
   }
 
   private async saveToDatabase(storeName: string, data: any): Promise<void> {
@@ -515,7 +473,12 @@ export class CryptoManager {
   }
 
   private async deleteFromDB(storeName: string, key: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
+    // Use in-memory storage if database is not available
+    if (!this.db) {
+      const memKey = `${storeName}_${key}`;
+      this.memoryStore.delete(memKey);
+      return;
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readwrite');

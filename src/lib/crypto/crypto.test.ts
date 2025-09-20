@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CryptoManager, KeyPair, SignedRequest } from './index';
 import { createMockWebCrypto } from '../../test/mocks';
 
@@ -177,8 +177,8 @@ describe('CryptoManager', () => {
 
       mockDatabase.keyPairs.set('EXPIRED', expiredKeyData);
 
-      // Trigger database open
-      if (mockRequest.onsuccess) mockRequest.onsuccess();
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       const result = await cryptoManager.loadKeyPair('EXPIRED');
       
@@ -326,7 +326,8 @@ describe('CryptoManager', () => {
 
     it('should encrypt and decrypt data', async () => {
       const originalData = 'Secret message for amateur radio';
-      
+
+      // Use the same key pair for encryption and decryption (self-encryption)
       const encrypted = await cryptoManager.encryptData(
         originalData,
         recipientKeyPair.publicKeyPem
@@ -336,7 +337,7 @@ describe('CryptoManager', () => {
       expect(encrypted).not.toContain(originalData);
 
       const decrypted = await cryptoManager.decryptData(encrypted);
-      
+
       expect(decrypted).toBe(originalData);
     });
 
@@ -347,7 +348,7 @@ describe('CryptoManager', () => {
       );
 
       const decrypted = await cryptoManager.decryptData(encrypted);
-      
+
       expect(decrypted).toBe('');
     });
 
@@ -385,8 +386,8 @@ describe('CryptoManager', () => {
     it('should add trusted keys', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
 
-      // Trigger database open
-      if (mockRequest.onsuccess) mockRequest.onsuccess();
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       await cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
 
@@ -397,8 +398,8 @@ describe('CryptoManager', () => {
     it('should remove trusted keys', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
 
-      // Trigger database open
-      if (mockRequest.onsuccess) mockRequest.onsuccess();
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       await cryptoManager.addTrustedKey('TRUSTED', publicKeyPem);
       await cryptoManager.removeTrustedKey('TRUSTED');
@@ -410,8 +411,8 @@ describe('CryptoManager', () => {
     it('should persist trusted keys in IndexedDB', async () => {
       const publicKeyPem = '-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----';
 
-      // Trigger database open
-      if (mockRequest.onsuccess) mockRequest.onsuccess();
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       await cryptoManager.addTrustedKey('PERSISTENT', publicKeyPem);
 
@@ -428,8 +429,8 @@ describe('CryptoManager', () => {
 
       mockDatabase.trustedKeys.set('LOADED', trustedKeyData);
 
-      // Trigger database open
-      if (mockRequest.onsuccess) mockRequest.onsuccess();
+      // Allow async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       const keys = await cryptoManager.getTrustedKeys();
       expect(keys['LOADED']).toBe(trustedKeyData.publicKeyPem);

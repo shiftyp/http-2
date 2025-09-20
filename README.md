@@ -426,6 +426,62 @@ signaling-server/            # WebRTC signaling server ✅
 └── package.json            # Minimal dependencies (ws, better-sqlite3)
 ```
 
+## 🚀 Deployment
+
+### Production Deployment
+
+For complete deployment instructions including building binaries, packaging PWA assets, and creating distribution packages, see the [Signaling Server Deployment Guide](signaling-server/README.md#deployment).
+
+#### Quick Deployment (One Command)
+
+```bash
+cd signaling-server
+./build-all.sh
+```
+
+This automated script creates a complete deployment package with:
+- Platform-specific binaries (Linux, macOS, Windows)
+- PWA assets bundled with the server
+- Startup scripts for each platform
+- Configuration templates
+- Emergency deployment scripts
+
+#### Deployment Options
+
+**Option 1: Pre-built Distribution Package**
+```bash
+# After running build-all.sh
+# Extract ham-radio-server.zip on target system
+./scripts/start-linux.sh      # Linux
+./scripts/start-macos.sh      # macOS
+scripts\start-windows.bat     # Windows
+```
+
+**Option 2: Docker Deployment**
+```bash
+docker build -t ham-radio-signaling signaling-server/
+docker run -p 8080:8080 ham-radio-signaling
+```
+
+**Option 3: Emergency Deployment**
+```bash
+# For rapid emergency deployment
+./scripts/emergency-start.sh
+```
+
+#### System Requirements
+- **Memory**: 512 MB minimum
+- **Disk**: 500 MB minimum
+- **Network**: Port 8080 available
+- **OS**: Linux, macOS, or Windows
+
+#### Production Configuration
+- Health check: `http://localhost:8080/health`
+- Statistics: `http://localhost:8080/stats`
+- Configure callsign and emergency settings in `config/server-config.json`
+
+For detailed deployment instructions, system requirements, and troubleshooting, see the [complete deployment guide](signaling-server/README.md).
+
 ## 🛠️ Development
 
 ### Commands
